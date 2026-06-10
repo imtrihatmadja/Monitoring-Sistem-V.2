@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Dashboard Pemantauan Indikator Proyek",
+  "description": "Sistem monitoring indikator capaian multi-proyek real-time dengan aktivitas, sub-aktivitas, notifikasi otomatis, dan fitur ekspor laporan. ",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
