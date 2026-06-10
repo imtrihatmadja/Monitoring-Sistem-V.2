@@ -1817,40 +1817,141 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
 
   // 5. RENDER TAB: STAFF & BEBAN KERJA
   if (activeTab === 'workload') {
-    const staffList = [
-      { name: 'Ir. Ahmad Subagio, M.T.', role: 'Project Manager SIPP-LUWU', projects: 1, taskCount: 4, workload: 45, status: 'Mengawasi' },
-      { name: 'Dian Permatasari, M.Si.', role: 'Project Manager MANGROVE-RES', projects: 1, taskCount: 5, workload: 85, status: 'Padat' },
-      { name: 'drg. Luh Putu Citrawati', role: 'Project Manager SABK-SAN', projects: 1, taskCount: 6, workload: 92, status: 'Kritis' },
-      { name: 'Danang Prasetyo', role: 'Software & IoT Engineer', projects: 2, taskCount: 3, workload: 60, status: 'Optimal' },
-      { name: 'Andi Nurhaliza', role: 'Field Officer - Advokasi & Sosial', projects: 3, taskCount: 7, workload: 75, status: 'Optimal' }
-    ];
+    // Generate staffList dynamically from actual database projects
+    interface StaffData {
+      name: string;
+      roles: Set<string>;
+      projectCodes: Set<string>;
+      taskCount: number;
+      activeTaskCount: number;
+    }
+
+    const staffMap = new Map<string, StaffData>();
+
+    const getOrCreateStaff = (nameStr: string): StaffData => {
+      const trimmedName = nameStr.trim();
+      const lookupKey = trimmedName.toLowerCase();
+      if (!staffMap.has(lookupKey)) {
+        staffMap.set(lookupKey, {
+          name: trimmedName,
+          roles: new Set<string>(),
+          projectCodes: new Set<string>(),
+          taskCount: 0,
+          activeTaskCount: 0
+        });
+      }
+      return staffMap.get(lookupKey)!;
+    };
+
+    projects.forEach(p => {
+      if (p.manager && p.manager.trim() && p.manager !== '-') {
+        const staff = getOrCreateStaff(p.manager);
+        staff.roles.add(`Manajer Proyek (${p.code})`);
+        staff.projectCodes.add(p.code);
+      }
+      if (p.pic && p.pic.trim() && p.pic !== '-' && p.pic !== p.manager) {
+        const staff = getOrCreateStaff(p.pic);
+        staff.roles.add(`PIC Lapangan (${p.code})`);
+        staff.projectCodes.add(p.code);
+      }
+      if (p.activities) {
+        p.activities.forEach(act => {
+          if (act.subActivities) {
+            act.subActivities.forEach(sub => {
+              if (sub.assignedTo && sub.assignedTo.trim() && sub.assignedTo !== '-') {
+                const staff = getOrCreateStaff(sub.assignedTo);
+                staff.projectCodes.add(p.code);
+                staff.taskCount += 1;
+                if (sub.status !== 'Selesai') {
+                  staff.activeTaskCount += 1;
+                }
+                staff.roles.add(`Pelaksana Teknis (${p.code})`);
+              }
+            });
+          }
+        });
+      }
+    });
+
+    const staffList = Array.from(staffMap.values()).map(staff => {
+      const rolesArr = Array.from(staff.roles);
+      let roleDisplay = '';
+      if (rolesArr.some(r => r.startsWith('Manajer Proyek'))) {
+        const mgrRoles = rolesArr.filter(r => r.startsWith('Manajer Proyek'));
+        roleDisplay = mgrRoles.join(', ');
+      } else if (rolesArr.some(r => r.startsWith('PIC'))) {
+        const picRoles = rolesArr.filter(r => r.startsWith('PIC'));
+        roleDisplay = picRoles.join(', ');
+      } else if (rolesArr.length > 0) {
+        roleDisplay = rolesArr.slice(0, 2).join(', ');
+        if (rolesArr.length > 2) roleDisplay += '...';
+      } else {
+        roleDisplay = 'Koordinator Lapangan / Pelaksana';
+      }
+
+      const projectsCount = staff.projectCodes.size;
+      const tasksCount = staff.taskCount;
+      const activeTasks = staff.activeTaskCount;
+      
+      const calculatedWorkload = Math.max(15, Math.min(98, (projectsCount * 25) + (activeTasks * 12)));
+      
+      let statusStr = 'Optimal';
+      if (calculatedWorkload > 85) statusStr = 'Kritis';
+      else if (calculatedWorkload > 65) statusStr = 'Padat';
+      else if (calculatedWorkload > 35) statusStr = 'Optimal';
+      else statusStr = 'Mengawasi';
+
+      return {
+        name: staff.name,
+        role: roleDisplay,
+        projects: projectsCount,
+        taskCount: tasksCount,
+        workload: calculatedWorkload,
+        status: statusStr
+      };
+    });
 
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-6">
-          <div>
-            <h2 className="text-xl font-bold font-display text-slate-800 flex items-center gap-2">
-              <Briefcase className="w-5.5 h-5.5 text-sky-600" />
-              Alokasi Staff & Analisis Beban Kerja
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Pemantauan penyebaran tugas, tanggung jawab, dan estimasi beban kerja bagi tim teknis serta field officer di lapangan secara berkala.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold font-display text-slate-800 flex items-center gap-2">
+                <Briefcase className="w-5.5 h-5.5 text-sky-600" />
+                Alokasi Staff & Analisis Beban Kerja
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Pemantauan penyebaran tugas, tanggung jawab, dan estimasi beban kerja bagi tim teknis serta field officer di lapangan secara berkala.
+              </p>
+            </div>
+            <div className="bg-sky-50 text-sky-800 border border-sky-100 px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 font-semibold">
+              <UserCheck className="w-4 h-4 text-sky-600" />
+              <span>{staffList.length} Staff Aktif Terdeteksi</span>
+            </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-xs bg-white">
-              <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-105">
-                <tr>
-                  <th className="p-3.5">Nama Staff Koordinator</th>
-                  <th className="p-3.5">Gelar / Peran Lapangan</th>
-                  <th className="p-3.5 text-center">Multi-Proyek</th>
-                  <th className="p-3.5 text-center">Sub-Aktivitas Aktif</th>
-                  <th className="p-3.5">Estimasi Beban Kerja</th>
-                  <th className="p-3.5 text-center">Tingkat Kesibukan</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+          {staffList.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-12 px-6 text-center text-slate-400">
+              <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+              <span className="text-sm font-bold block text-slate-700">Belum Ada Staff Terdeteksi</span>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                Staff secara otomatis dideteksi dari nama <b>Manajer Proyek</b>, <b>PIC Lapangan</b>, atau penanggung jawab <b>Sub-Aktivitas</b> pada proyek rill Anda. Silakan isi terlebih dahulu proyek baru Anda atau pulihkan data demo.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
+              <table className="w-full text-left text-xs bg-white">
+                <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-105">
+                  <tr>
+                    <th className="p-3.5 text-[11px] uppercase tracking-wider">Nama Staff Pelaksana</th>
+                    <th className="p-3.5 text-[11px] uppercase tracking-wider">Gelar / Penugasan Terkait</th>
+                    <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Jumlah Proyek</th>
+                    <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Total Sub-Aktivitas</th>
+                    <th className="p-3.5 text-[11px] uppercase tracking-wider">Metrik Beban Kerja</th>
+                    <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Kesibukan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                 {staffList.map((staff, idx) => {
                   let alertBg = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
                   if (staff.status === 'Optimal') alertBg = 'bg-sky-50 text-sky-700 border border-sky-100';
@@ -1887,6 +1988,7 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
     );

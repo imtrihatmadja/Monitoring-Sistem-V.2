@@ -37,8 +37,10 @@ import {
   BookOpen,
   Lightbulb,
   AlertTriangle,
-  X
+  X,
+  Upload
 } from 'lucide-react';
+import ImportProjectModal from './ImportProjectModal';
 
 interface ProjectDetailProps {
   projects: Project[];
@@ -47,6 +49,7 @@ interface ProjectDetailProps {
   onUpdateProject: (updatedProject: Project) => void;
   onTriggerAlert: (projectName: string, indicatorName: string, value: number, target: number, unit: string, thresholdAlert: number) => void;
   onAddProject?: (newProject: Project) => void;
+  onAddProjects?: (newProjects: Project[]) => void;
 }
 
 export default function ProjectDetail({ 
@@ -55,7 +58,8 @@ export default function ProjectDetail({
   onSelectProject, 
   onUpdateProject,
   onTriggerAlert,
-  onAddProject
+  onAddProject,
+  onAddProjects
 }: ProjectDetailProps) {
 
   const project = projects.find(p => p.id === selectedProjectId) || projects[0] || {
@@ -88,6 +92,7 @@ export default function ProjectDetail({
 
   // Add Project Modal States
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [pCode, setPCode] = useState('');
   const [pName, setPName] = useState('');
   const [pManager, setPManager] = useState('');
@@ -801,6 +806,15 @@ export default function ProjectDetail({
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Proyek</span>
+              </button>
+
+              <button 
+                onClick={() => setShowImportModal(true)}
+                className="bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold font-display shadow-lg shadow-sky-950/20 flex items-center gap-1.5 cursor-pointer transition-all hover:scale-[1.02]"
+                title="Impor Proyek Massal dari Excel / CSV"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Impor Proyek</span>
               </button>
             </div>
           </div>
@@ -2125,6 +2139,22 @@ export default function ProjectDetail({
             </div>
           </div>
         </div>
+      )}
+
+      {/* IMPOR BULK PROYEK DARI EXCEL / CSV */}
+      {showImportModal && (
+        <ImportProjectModal 
+          onClose={() => setShowImportModal(false)}
+          onImport={(importedProjects) => {
+            if (onAddProjects) {
+              onAddProjects(importedProjects);
+              showFeedback(`✓ Berhasil mengimpor ${importedProjects.length} proyek secara bulk!`);
+            } else if (onAddProject) {
+              importedProjects.forEach(p => onAddProject(p));
+              showFeedback(`✓ Berhasil mengimpor ${importedProjects.length} proyek secara bulk!`);
+            }
+          }}
+        />
       )}
 
       {/* 4. MODAL DETIL TAMBAH PROYEK (POPUP DIALOG) */}

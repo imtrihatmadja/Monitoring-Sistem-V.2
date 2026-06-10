@@ -876,6 +876,12 @@ export default function App() {
                 setProjects(prev => [...prev, newProject]);
                 setSelectedProjectId(newProject.id);
               }}
+              onAddProjects={(newProjects) => {
+                setProjects(prev => [...prev, ...newProjects]);
+                if (newProjects.length > 0) {
+                  setSelectedProjectId(newProjects[newProjects.length - 1].id);
+                }
+              }}
             />
           )}
 
