@@ -6,6 +6,14 @@ import ProjectDetail from './components/ProjectDetail';
 import ExportPanel from './components/ExportPanel';
 import ExtraViews from './components/ExtraViews';
 import { 
+  verifySupabaseSchema, 
+  dbFetchProjects, 
+  dbSaveAllProjects, 
+  dbFetchAlerts, 
+  dbSaveAllAlerts,
+  SUPABASE_SQL_SETUP_SCRIPT
+} from './lib/supabaseClient';
+import { 
   Tv, 
   Layers, 
   BarChart2, 
@@ -28,7 +36,8 @@ import {
   Archive,
   Briefcase,
   Printer,
-  ChevronDown
+  ChevronDown,
+  Database
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -62,14 +71,85 @@ export default function App() {
   // Responsive Sidebar Open State
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
-  // Sync state to local storage on change
+  // Supabase Cloud Synchronization States
+  const [supabaseConnected, setSupabaseConnected] = useState<boolean>(false);
+  const [supabaseTablesOk, setSupabaseTablesOk] = useState<boolean>(false);
+  const [supabaseLoading, setSupabaseLoading] = useState<boolean>(true);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+  const [showSupabaseSetupModal, setShowSupabaseSetupModal] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+
+  // Load initial data from Supabase Cloud on Mount
+  useEffect(() => {
+    async function initSupabase() {
+      try {
+        setSupabaseLoading(true);
+        const schema = await verifySupabaseSchema();
+        setSupabaseConnected(schema.connected);
+        setSupabaseTablesOk(schema.tablesCreated);
+        
+        if (schema.connected && schema.tablesCreated) {
+          const cloudProj = await dbFetchProjects(INITIAL_PROJECTS);
+          setProjects(cloudProj);
+          const cloudAlerts = await dbFetchAlerts(INITIAL_ALERTS);
+          setAlerts(cloudAlerts);
+        } else if (schema.connected && !schema.tablesCreated) {
+          setSupabaseError('Tabel proyek belum di-setup di database Supabase Anda.');
+        } else {
+          setSupabaseError(schema.errorMsg || 'Koneksi ke Supabase gagal.');
+        }
+      } catch (err: any) {
+        setSupabaseError(err?.message || 'Gagal sinkronisasi data.');
+      } finally {
+        setSupabaseLoading(false);
+      }
+    }
+    initSupabase();
+  }, []);
+
+  // Sync core state to local storage AND Supabase Cloud on change
   useEffect(() => {
     localStorage.setItem('monitoring_projects', JSON.stringify(projects));
-  }, [projects]);
+    if (supabaseConnected && supabaseTablesOk) {
+      dbSaveAllProjects(projects).catch(err => console.error('Gagal simpan proyek ke cloud:', err));
+    }
+  }, [projects, supabaseConnected, supabaseTablesOk]);
 
   useEffect(() => {
     localStorage.setItem('monitoring_alerts', JSON.stringify(alerts));
-  }, [alerts]);
+    if (supabaseConnected && supabaseTablesOk) {
+      dbSaveAllAlerts(alerts).catch(err => console.error('Gagal simpan alerts ke cloud:', err));
+    }
+  }, [alerts, supabaseConnected, supabaseTablesOk]);
+
+  const handleForceSyncSupabase = async () => {
+    try {
+      setSupabaseLoading(true);
+      const schema = await verifySupabaseSchema();
+      setSupabaseConnected(schema.connected);
+      setSupabaseTablesOk(schema.tablesCreated);
+      
+      if (schema.connected && schema.tablesCreated) {
+        const cloudProj = await dbFetchProjects(INITIAL_PROJECTS);
+        setProjects(cloudProj);
+        const cloudAlerts = await dbFetchAlerts(INITIAL_ALERTS);
+        setAlerts(cloudAlerts);
+        setSupabaseError(null);
+        alert('✓ Sinkronisasi Berhasil!\n\nSeluruh data terbaru berhasil ditarik dari database Supabase Anda.');
+      } else if (schema.connected && !schema.tablesCreated) {
+        setSupabaseError('Tabel proyek belum di-setup di database Supabase Anda.');
+        setShowSupabaseSetupModal(true);
+      } else {
+        setSupabaseError(schema.errorMsg || 'Koneksi gagal.');
+        alert(`❌ Koneksi Supabase gagal:\n${schema.errorMsg || 'Gagal menghubungkan'}`);
+      }
+    } catch (err: any) {
+      setSupabaseError(err?.message || 'Gagal sinkronisasi.');
+      alert(`❌ Gagal sinkronisasi: ${err?.message}`);
+    } finally {
+      setSupabaseLoading(false);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem('monitoring_active_tab', activeTab);
@@ -524,11 +604,32 @@ export default function App() {
 
         {/* Lower Sidebar Actions (Reset data, system description specs) */}
         <div className="p-4 border-t border-slate-800 space-y-3.5">
+          {(!supabaseConnected || !supabaseTablesOk) ? (
+            <button
+              onClick={() => setShowSupabaseSetupModal(true)}
+              className="w-full bg-[#3ecf8e] hover:bg-[#34b27b] text-[#0f172a] font-extrabold text-[11px] py-3 px-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg shadow-emerald-950/20 border border-emerald-400/30 animate-pulse font-display"
+            >
+              <Database className="w-4 h-4 text-[#0f172a]" />
+              <span>SETUP DATABASE SUPABASE</span>
+            </button>
+          ) : (
+            <div className="p-3 bg-emerald-900/40 rounded-xl border border-emerald-800/40 text-[10px] text-emerald-350 leading-normal flex flex-col gap-1">
+              <span className="font-extrabold text-emerald-300 block mb-0.5 flex items-center gap-1.5 font-display">
+                <Database className="w-4 h-4 text-[#3ecf8e]" /> Supabase Terhubung ✓
+              </span>
+              Sinkronisasi modul naskah & log otomatis dengan platform Supabase Cloud Anda aman & aktif.
+            </div>
+          )}
+
           <div className="p-3 bg-slate-800/40 rounded-xl border border-slate-800/60 text-[10px] text-slate-500 leading-normal">
             <span className="font-semibold text-slate-400 block mb-0.5 flex items-center gap-1">
-              <Info className="w-3.5 h-3.5 text-sky-400" /> Database Relasional
+              <Info className="w-3.5 h-3.5 text-sky-400" /> Status Database
             </span>
-            Struktur state didesain modular, kompatibel penuh untuk dihubungkan ke <b>Supabase API/SDK</b> dan dideploy ke GitHub.
+            {supabaseConnected && supabaseTablesOk ? (
+              <span className="text-emerald-450 font-medium font-mono">Terkoneksi secara langsung ke Cloud Database Supabase Proyek <b>kvaktoebwxpgmydihajx</b>.</span>
+            ) : (
+              <span className="text-rose-400 font-medium">Platform saat ini menggunakan Local Storage browser Anda sebagai cadangan offline sebelum Supabase dikoneksikan.</span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5 pt-1">
@@ -584,11 +685,31 @@ export default function App() {
               <span>Update Terakhir: {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
 
-            {/* Realtime ON badge */}
-            <div className="bg-emerald-50 text-emerald-705 px-3 py-1.5 rounded-xl border border-emerald-100 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-              🟢 Realtime ON
-            </div>
+            {/* Supabase Dynamic Cloud Sync Badge */}
+            {supabaseLoading ? (
+              <div className="bg-amber-50 text-amber-800 px-3 py-1.5 rounded-xl border border-amber-100 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
+                ☁️ Menghubungkan Supabase...
+              </div>
+            ) : supabaseConnected && supabaseTablesOk ? (
+              <button 
+                onClick={handleForceSyncSupabase}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-4xs transition-all hover:scale-[1.01]"
+                title="☁️ Database Supabase Terkoneksi Lancar! Klik untuk paksa sinkronisasi ulang instan sekarang."
+              >
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                🟢 Supabase: Aktif ✓
+              </button>
+            ) : (
+              <button 
+                onClick={() => setShowSupabaseSetupModal(true)}
+                className="bg-rose-600 text-white hover:bg-rose-700 px-4 py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-md shadow-rose-600/25 transition-all hover:scale-105 animate-pulse border border-rose-500"
+                title="⚠️ Klik di sini untuk panduan setup SQL 1-Menit!"
+              >
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+                ⚠️ SETUP SUPABASE DATABASE (KLIK)
+              </button>
+            )}
 
             {/* Refresh Button */}
             <button 
@@ -859,6 +980,138 @@ export default function App() {
 
         </div>
       </div>
+
+      {/* MODAL SETUP SUPABASE UNTUK NON-DEVELOPER */}
+      <AnimatePresence>
+        {showSupabaseSetupModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[85vh] text-left"
+            >
+              <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-indigo-600 rounded-xl">
+                    <RefreshCw className="w-4 h-4 text-white animate-spin" style={{ animationDuration: '4s' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-black text-sm tracking-wide">PANDUAN SETUP SUPABASE</h3>
+                    <p className="text-[10px] text-slate-400 font-mono">ID Proyek: kvaktoebwxpgmydihajx</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowSupabaseSetupModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 p-2 rounded-xl text-slate-400 hover:text-white cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-4 text-xs font-semibold leading-relaxed text-slate-705">
+                <p className="text-slate-500 font-medium leading-relaxed">
+                  Halo Pak Imam! Karena Bapak adalah Program Director, kami merancang asisten intuitif ini agar Bapak dapat menghubungkan aplikasi secara langsung dan sungguhan ke Supabase dalam 4 langkah simpel, tanpa perlu menyunting kode pemrograman apa pun:
+                </p>
+
+                <div className="space-y-4 pt-1">
+                  {/* Langkah 1 */}
+                  <div className="flex gap-3">
+                    <span className="bg-sky-100 text-sky-800 font-bold font-display w-6 h-6 rounded-full flex items-center justify-center shrink-0">1</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Buka Dashboard Supabase Anda</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Buka link <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-sky-605 underline font-extrabold">https://supabase.com/dashboard</a>, lalu masuk ke akun Anda dan pilih nama proyek Anda.</p>
+                    </div>
+                  </div>
+
+                  {/* Langkah 2 */}
+                  <div className="flex gap-3">
+                    <span className="bg-sky-100 text-sky-800 font-bold font-display w-6 h-6 rounded-full flex items-center justify-center shrink-0">2</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Pilih Menu "SQL Editor"</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Pada panel menu hitam di sebelah kiri layar dashboard Supabase Anda, cari dan klik ikon berlogo petir/lembaran bertuliskan <b>"SQL Editor"</b>.</p>
+                    </div>
+                  </div>
+
+                  {/* Langkah 3 */}
+                  <div className="flex gap-3">
+                    <span className="bg-sky-100 text-sky-800 font-bold font-display w-6 h-6 rounded-full flex items-center justify-center shrink-0">3</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Tempel Kode SQL & Klik Run</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Klik tombol <b>"New Query"</b> di atas, lalu salin (copy) seluruh naskah database di bawah ini, tempelkan (paste) di layar kosong editor, lalu klik tombol hijau <b>"Run"</b> di kanan bawah editor.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3">
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="font-mono text-[9px] font-black uppercase text-slate-400">📜 Script Struktur Database (SQL)</span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(SUPABASE_SQL_SETUP_SCRIPT);
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 3500);
+                      }}
+                      className="bg-indigo-650 hover:bg-slate-900 text-white px-3.5 py-1.5 rounded-xl font-bold font-display text-[10px] cursor-pointer shadow-4xs flex items-center gap-1.5 transition-all active:scale-95"
+                    >
+                      {copiedSql ? '✓ Berhasil Disalin!' : '📋 Salin Script SQL'}
+                    </button>
+                  </div>
+                  <pre className="p-3.5 bg-slate-900 text-emerald-400 rounded-xl overflow-x-auto text-[10px] font-mono leading-relaxed max-h-[170px] border border-slate-905 w-full select-all">
+                    {SUPABASE_SQL_SETUP_SCRIPT}
+                  </pre>
+                </div>
+
+                {/* Langkah 4 */}
+                <div className="flex gap-3">
+                  <span className="bg-sky-100 text-sky-800 font-bold font-display w-6 h-6 rounded-full flex items-center justify-center shrink-0">4</span>
+                  <div>
+                    <p className="font-bold text-slate-800">Aktifkan Hubungan Awan</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Setelah menekan "Run" dan muncul notifikasi sukses di Supabase, silakan klik tombol biru di bawah ini untuk mengaktifkan sinkronisasi awan secara langsung.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200/60 flex flex-col sm:flex-row gap-3 sm:justify-between items-center sm:px-6">
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                  🛡️ Koneksi SSL Terenkripsi Anon Key
+                </span>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowSupabaseSetupModal(false)}
+                    className="border border-slate-250 bg-white hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Tutup
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      await handleForceSyncSupabase();
+                      setShowSupabaseSetupModal(false);
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold font-display shadow-indigo-600/15 shadow-xl flex items-center gap-1.5 cursor-pointer transition-all hover:scale-[1.02]"
+                  >
+                    <span>⚡ Saya Sudah Jalankan Query & Hubungkan</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Persistent Bouncing floating Supabase launcher button with stunning focus animation */}
+      {(!supabaseConnected || !supabaseTablesOk) && (
+        <div className="fixed bottom-6 right-6 z-45 print:hidden">
+          <button
+            onClick={() => setShowSupabaseSetupModal(true)}
+            className="flex items-center gap-2.5 px-6 py-4 bg-gradient-to-r from-rose-600 via-indigo-600 to-[#3ecf8e] text-white rounded-full font-display font-black text-xs uppercase tracking-wider shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border-3 border-white animate-bounce shadow-rose-600/30"
+            title="Klik di sini untuk Setup Supabase"
+          >
+            <Database className="w-4.5 h-4.5 text-white animate-spin" style={{ animationDuration: '3.5s' }} />
+            <span>Koneksikan Supabase 🔌</span>
+          </button>
+        </div>
+      )}
 
     </div>
   );

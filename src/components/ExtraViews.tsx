@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, CurrentIssue, LessonLearned } from '../types';
+import { verifySupabaseSchema, dbFetchExternalIssues, dbSaveAllExternalIssues } from '../lib/supabaseClient';
 import { 
   FileText, 
   Users, 
@@ -118,9 +119,60 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
     ];
   });
 
-  // Sync external issues to LocalStorage
-  React.useEffect(() => {
+  // Sync external issues to LocalStorage and Supabase Cloud
+  useEffect(() => {
+    async function initSupabaseIssues() {
+      try {
+        const schema = await verifySupabaseSchema();
+        if (schema.connected && schema.tablesCreated) {
+          const defaultList: CurrentIssue[] = [
+            {
+              id: 'ext-1',
+              date: '2026-06-08',
+              severity: 'Sedang',
+              category: 'Kebijakan',
+              headline: 'Implementasi Aturan Penangkapan Ikan Terukur (PIT) Ditolak Asosiasi Nelayan Tradisional',
+              description: 'Kebijakan kuota penangkapan kuantitatif dinilai mendiskriminasi nelayan kecil skala tradisional di perbatasan WPP 718 Kelautan.',
+              mitigation: 'DFW Indonesia melakukan advokasi regulasi dampingan bersama Serikat Nelayan agar kuota khusus nelayan lokal dijamin tanpa biaya tambahan.',
+              status: 'Aktif',
+              newsUrl: 'https://kkp.go.id/artikel/42681-kkp-penerapan-penangkapan-ikan-terukur-berbasis-kuota-mulai-2025',
+              newsSource: 'Humas KKP RI',
+              developments: '08 Juni 2026: Menggelar Focus Group Discussion bersama perwakilan KKP dan DPP HNSI di Merauke untuk draf kesepakatan jaminan nelayan lokal.'
+            },
+            {
+              id: 'ext-2',
+              date: '2026-06-06',
+              severity: 'Tinggi',
+              category: 'Iklim/Alam',
+              headline: 'Ancaman Pemutihan Karang (Coral Bleaching) Akibat Gelombang Panas Maritim di Indonesia Timur',
+              description: 'Suhu permukaan air laut meningkat hingga mencapai 31.5°C di sekitar perairan Wakatobi dan Laut Banda secara mengkhawatirkan.',
+              mitigation: 'Monitoring berkala dengan sensor suhu bawah air dan mempercepat transplantasi karang tahan panas (heat-resistant thermal strains).',
+              status: 'Aktif',
+              newsUrl: 'https://news.detik.com/berita/d-7325608/suhu-laut-meningkat-terumbu-karang-indonesia-terancam-puso',
+              newsSource: 'Detik News',
+              developments: '07 Juni 2026: DFW menurunkan tim selam pemantau terumbu karang di kawasan zona penutupan sasi adat pulau Tomia.'
+            }
+          ];
+          const cloudIssues = await dbFetchExternalIssues(defaultList);
+          setExternalIssues(cloudIssues);
+        }
+      } catch (err) {
+        console.error('Gagal mengambil external issues dari Supabase:', err);
+      }
+    }
+    initSupabaseIssues();
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('monitoring_external_issues', JSON.stringify(externalIssues));
+    
+    async function saveToCloud() {
+      const schema = await verifySupabaseSchema();
+      if (schema.connected && schema.tablesCreated) {
+        await dbSaveAllExternalIssues(externalIssues);
+      }
+    }
+    saveToCloud().catch(err => console.error(err));
   }, [externalIssues]);
 
   // Initial rich database of beneficiaries 
