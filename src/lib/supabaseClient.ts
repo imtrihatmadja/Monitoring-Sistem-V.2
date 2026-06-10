@@ -59,12 +59,22 @@ CREATE TABLE IF NOT EXISTS external_issues (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. Matikan RLS demi kemudahan akses cepat Anon Key (Sangat cocok untuk prototipe internal DFW)
+-- 4. Matikan RLS atau buat Kebijakan (Policies) agar dapat diakses penuh via Anon/Public Key
 ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts DISABLE ROW LEVEL SECURITY;
 ALTER TABLE external_issues DISABLE ROW LEVEL SECURITY;
 
--- 5. Beri izin penuh kepada anon (jika RLS tidak sengaja aktif kembali)
+-- Tambahan kebijakan (Fallback) jika RLS aktif secara paksa oleh sistem Supabase
+DROP POLICY IF EXISTS "Akses Publik Proyek" ON projects;
+CREATE POLICY "Akses Publik Proyek" ON projects FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Akses Publik Alerts" ON alerts;
+CREATE POLICY "Akses Publik Alerts" ON alerts FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Akses Publik Isu Eksternal" ON external_issues;
+CREATE POLICY "Akses Publik Isu Eksternal" ON external_issues FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 5. Beri izin penuh kepada anon, authenticated, dan service_role
 GRANT ALL ON TABLE projects TO anon, authenticated, service_role;
 GRANT ALL ON TABLE alerts TO anon, authenticated, service_role;
 GRANT ALL ON TABLE external_issues TO anon, authenticated, service_role;
@@ -99,6 +109,9 @@ export async function dbFetchProjects(defaultProjects: Project[]): Promise<Proje
     if (error) throw error;
 
     if (!data || data.length === 0) {
+      if (localStorage.getItem('supabase_cleared_by_user') === 'true') {
+        return [];
+      }
       // Seed database with initial data
       console.log('Database kosong. Melakukan seeding proyek bawaan...');
       await dbSaveAllProjects(defaultProjects);
@@ -167,6 +180,9 @@ export async function dbFetchAlerts(defaultAlerts: SystemAlert[]): Promise<Syste
     if (error) throw error;
 
     if (!data || data.length === 0) {
+      if (localStorage.getItem('supabase_cleared_by_user') === 'true') {
+        return [];
+      }
       console.log('Database alerts kosong. Melakukan seeding...');
       await dbSaveAllAlerts(defaultAlerts);
       return defaultAlerts;
@@ -236,6 +252,26 @@ export async function dbSaveAllAlerts(alerts: SystemAlert[]): Promise<void> {
   }
 }
 
+export async function dbDeleteAllProjects(): Promise<void> {
+  try {
+    const { error } = await supabase.from('projects').delete().neq('id', 'dummy_keep_all');
+    if (error) throw error;
+  } catch (err) {
+    console.error('Gagal menghapus semua proyek dari Supabase:', err);
+    throw err;
+  }
+}
+
+export async function dbDeleteAllExternalIssues(): Promise<void> {
+  try {
+    const { error } = await supabase.from('external_issues').delete().neq('id', 'dummy_keep_all');
+    if (error) throw error;
+  } catch (err) {
+    console.error('Gagal menghapus semua isu dari Supabase:', err);
+    throw err;
+  }
+}
+
 export async function dbDeleteAllAlerts(): Promise<void> {
   try {
     const { error } = await supabase.from('alerts').delete().neq('id', 'dummy_keep_all');
@@ -256,6 +292,9 @@ export async function dbFetchExternalIssues(defaultIssues: CurrentIssue[]): Prom
     if (error) throw error;
 
     if (!data || data.length === 0) {
+      if (localStorage.getItem('supabase_cleared_by_user') === 'true') {
+        return [];
+      }
       console.log('Database isu eksternal kosong. Melakukan seeding...');
       await dbSaveAllExternalIssues(defaultIssues);
       return defaultIssues;

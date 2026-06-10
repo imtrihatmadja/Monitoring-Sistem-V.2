@@ -139,6 +139,20 @@ export default function ExportPanel({ projects }: ExportPanelProps) {
     }, 1000);
   };
 
+  if (projects.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-100 p-8 sm:p-14 text-center max-w-2xl mx-auto my-12 shadow-sm">
+        <div className="w-16 h-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-slate-100">
+          <FileText className="w-8 h-8 text-slate-450" />
+        </div>
+        <h2 className="font-display font-black text-slate-800 text-xl tracking-tight">Belum Ada Laporan Ekspor</h2>
+        <p className="text-slate-500 text-xs sm:text-sm mt-3 leading-relaxed max-w-sm mx-auto font-medium">
+          Daftarkan proyek Anda terlebih dahulu untuk mengunduh berkas laporan, tabel komparatif, dan lembar kerja audit.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Title Header */}

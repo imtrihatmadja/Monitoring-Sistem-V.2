@@ -11,7 +11,10 @@ import {
   dbSaveAllProjects, 
   dbFetchAlerts, 
   dbSaveAllAlerts,
-  SUPABASE_SQL_SETUP_SCRIPT
+  SUPABASE_SQL_SETUP_SCRIPT,
+  dbDeleteAllProjects,
+  dbDeleteAllAlerts,
+  dbDeleteAllExternalIssues
 } from './lib/supabaseClient';
 import { 
   Tv, 
@@ -37,7 +40,8 @@ import {
   Briefcase,
   Printer,
   ChevronDown,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -244,12 +248,51 @@ export default function App() {
   };
 
   const handleResetDataToDefault = () => {
-    if (confirm('Tindakan ini akan mengembalikan seluruh data progress ke database awal bawaan pabrik. Lanjutkan?')) {
+    if (confirm('Tindakan ini akan mengembalikan seluruh data fiktif bawaan demo pabrik ke browser Anda. Lanjutkan?')) {
+      localStorage.removeItem('supabase_cleared_by_user');
       setProjects(INITIAL_PROJECTS);
       setAlerts(INITIAL_ALERTS);
       setActiveTab('executive');
       setSelectedProjectId('proj-1');
-      localStorage.clear();
+      
+      // Clear data keys specifically, leaving Supabase credentials intact!
+      localStorage.removeItem('monitoring_projects');
+      localStorage.removeItem('monitoring_alerts');
+      localStorage.removeItem('monitoring_selected_project_id');
+      alert('✓ Data demo bawaan berhasil dipulihkan di penyimpanan lokal browser Anda.');
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (confirm('⚠️ PERINGATAN KERAS: Tindakan ini akan menghapus SECARA PERMANEN seluruh data proyek, indikator, penerima manfaat, dan notifikasi.\n\nSistem Anda akan berada dalam kondisi KOSONG TOTAL (kanvas bersih) agar Anda dapat memasukkan data riil program kerja Anda sendiri dari nol.\n\nApakah Anda yakin ingin menghapus semuanya?')) {
+      try {
+        setSupabaseLoading(true);
+        // Set flag to prevent default data seeding on subsequent loads
+        localStorage.setItem('supabase_cleared_by_user', 'true');
+        
+        // 1. Kosongkan state lokal
+        setProjects([]);
+        setAlerts([]);
+        setSelectedProjectId('');
+        
+        localStorage.removeItem('monitoring_projects');
+        localStorage.removeItem('monitoring_alerts');
+        localStorage.removeItem('monitoring_selected_project_id');
+        
+        // 2. Kosongkan database cloud jika terkoneksi
+        if (supabaseConnected && supabaseTablesOk) {
+          await dbDeleteAllProjects();
+          await dbDeleteAllAlerts();
+          await dbDeleteAllExternalIssues();
+        }
+        
+        setActiveTab('executive');
+        alert('✓ Semua data fiktif telah dibersihkan! Sekarang sistem kosong total. Anda dapat masuk ke tab "Rincian Proyek" untuk mendaftarkan proyek pemantauan Anda yang pertama.');
+      } catch (err: any) {
+        alert(`❌ Gagal menghapus data cloud: ${err?.message || err}`);
+      } finally {
+        setSupabaseLoading(false);
+      }
     }
   };
 
@@ -632,16 +675,26 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5 pt-1">
+          <div className="flex flex-col gap-2 pt-2 border-t border-slate-850 mt-1.5">
+            <button 
+              onClick={handleClearAllData}
+              className="w-full text-left font-display text-[10px] font-extrabold text-rose-450 hover:text-rose-400 hover:bg-rose-950/30 px-2 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Mulai lembaran baru dengan menghapus semua proyek demo fiktif bawaan pabrik"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              KOSONGKAN DATA & RIIL (BARU)
+            </button>
+            
             <button 
               onClick={handleResetDataToDefault}
-              className="w-full text-left font-display text-[10px] font-bold text-slate-500 hover:text-rose-400 transition-colors flex items-center gap-1.5 py-1"
+              className="w-full text-left font-display text-[10px] font-semibold text-slate-500 hover:text-slate-300 hover:bg-slate-800/40 px-2 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Kembalikan data proyek serta status fiktif bawaan pabrik untuk keperluan uji coba"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Reset Database Ke Awal
+              Pulihkan Data Demo Instan
             </button>
-            <span className="text-[9px] text-slate-650 font-mono block">
-              © {new Date().getFullYear()} DFW Indonesia
+            <span className="text-[9px] text-slate-600 font-mono block text-center mt-1">
+              © {new Date().getFullYear()} NGO DFW Indonesia
             </span>
           </div>
         </div>

@@ -61,9 +61,9 @@ export default function ExecutiveDashboard({
     return Math.round(weightedProgress * 10) / 10;
   };
 
-  const avgProgress = Math.round(
+  const avgProgress = projects.length > 0 ? Math.round(
     projects.reduce((acc, curr) => acc + calculateProjectOverallProgress(curr), 0) / projects.length
-  );
+  ) : 0;
 
   const activeAlerts = alerts.filter(a => !a.read);
   const criticalAlertsCount = alerts.filter(a => a.type === 'critical').length;
@@ -107,6 +107,28 @@ export default function ExecutiveDashboard({
         status: p.status
       }))
   );
+
+  if (projects.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-105 p-8 sm:p-14 text-center max-w-2xl mx-auto my-12 shadow-sm">
+        <div className="w-16 h-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-slate-100">
+          <Briefcase className="w-8 h-8 text-sky-600" />
+        </div>
+        <h2 className="font-display font-black text-slate-800 text-xl sm:text-2xl tracking-tight">Kondisi Database Kosong Total</h2>
+        <p className="text-slate-500 text-xs sm:text-sm mt-3 leading-relaxed max-w-md mx-auto font-medium">
+          Semua data bawaan demo berhasil dibersihkan dari sistem. Anda berada di dashboard yang sepenuhnya baru dan siap mendukung pemantauan real-time proyek program nyata <b>DFW Indonesia</b>.
+        </p>
+        <div className="mt-8 flex justify-center">
+          <button 
+            onClick={() => onNavigate('projects')} 
+            className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] uppercase tracking-wider py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-sky-600/20 active:scale-95"
+          >
+            <span>Tambah Proyek Pertama Anda ➔</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

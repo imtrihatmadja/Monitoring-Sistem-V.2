@@ -58,7 +58,30 @@ export default function ProjectDetail({
   onAddProject
 }: ProjectDetailProps) {
 
-  const project = projects.find(p => p.id === selectedProjectId) || projects[0];
+  const project = projects.find(p => p.id === selectedProjectId) || projects[0] || {
+    id: '',
+    code: '',
+    name: 'Belum Ada Proyek Aktif',
+    status: 'Sesuai Rencana',
+    department: '-',
+    manager: '-',
+    startDate: '-',
+    endDate: '-',
+    budget: 0,
+    budgetRealization: 0,
+    description: 'Silakan klik tombol "Tambah Proyek" di atas untuk mendaftarkan proyek program DFW Anda yang sedang berjalan.',
+    location: '-',
+    pic: '-',
+    donor: '-',
+    goal: '-',
+    outcomes: [],
+    priorityIssue: '',
+    metrics: { beneficiaries: '0', events: '0', documents: '0', weight: '0' },
+    activities: [],
+    indicators: [],
+    lessonsLearned: [],
+    currentIssues: []
+  };
 
   // Tab State
   const [activeSubTab, setActiveSubTab] = useState<'indicators' | 'activities' | 'reflections' | 'manage'>('indicators');
