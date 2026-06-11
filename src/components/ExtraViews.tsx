@@ -618,9 +618,23 @@ export default function ExtraViews({
           isGDrive: true,
           webViewLink: rf.webViewLink
         }));
-        setDocuments(mapped);
+        
+        // Merge keeping local offline files, and avoiding duplicates
+        setDocuments(prev => {
+          const locals = prev.filter(d => !d.isGDrive);
+          const combined = [...locals, ...mapped];
+          const seen = new Set();
+          return combined.filter(item => {
+            const key = `${item.name}-${item.project}-${item.category}`;
+            if (seen.has(key)) {
+              return false;
+            }
+            seen.add(key);
+            return true;
+          });
+        });
       } else {
-        setDocuments([]);
+        setDocuments(prev => prev.filter(d => !d.isGDrive));
       }
     } catch (e) {
       console.error("Gagal sinkron Google Drive:", e);

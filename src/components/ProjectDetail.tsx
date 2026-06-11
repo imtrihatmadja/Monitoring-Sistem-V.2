@@ -45,6 +45,8 @@ import {
   Download
 } from 'lucide-react';
 import ImportProjectModal from './ImportProjectModal';
+import { getAccessToken, initAuth } from '../lib/firebaseAuth';
+import { getOrCreateDriveFolderPath, uploadFileToDrive, deleteDriveFile } from '../lib/googleDriveService';
 
 interface ProjectDetailProps {
   projects: Project[];
@@ -106,27 +108,79 @@ export default function ProjectDetail({
   const [docCategoryInput, setDocCategoryInput] = useState('ToR');
   const [docUploadFeedback, setDocUploadFeedback] = useState<string | null>(null);
   const [isDocDragging, setIsDocDragging] = useState(false);
+  const [googleToken, setGoogleToken] = useState<string | null>(getAccessToken());
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
-  // File Upload Handlers for Documents tab
-  const uploadDocToProject = (file: File) => {
+  React.useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleToken(token);
+      },
+      () => {
+        setGoogleToken(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // File Upload Handlers for Documents tab (Google Drive + Local Preview support)
+  const uploadDocToProject = async (file: File) => {
     const targetCode = project ? project.code : '';
     if (!targetCode) {
       setDocUploadFeedback('❌ Gagal: Kode proyek tidak ditemukan.');
       return;
     }
-    const newDoc = {
-      id: `doc-${Date.now()}`,
-      name: file.name,
-      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-      date: new Date().toISOString().split('T')[0],
-      project: targetCode,
-      category: docCategoryInput,
-      status: 'Disetujui',
-      isGDrive: false
-    };
-    setDocuments(prev => [newDoc, ...prev]);
-    setDocUploadFeedback(`✓ Berhasil menambahkan dokumen "${file.name}" ke kategori [${docCategoryInput}]!`);
-    setTimeout(() => setDocUploadFeedback(null), 4000);
+
+    if (googleToken) {
+      setIsUploadingDoc(true);
+      setDocUploadFeedback(`⏳ Mengunggah "${file.name}" ke Google Drive...`);
+      try {
+        const folderId = await getOrCreateDriveFolderPath(googleToken, targetCode, project.name || targetCode, docCategoryInput);
+        const uploaded = await uploadFileToDrive(googleToken, file, folderId);
+        
+        const newDoc = {
+          id: uploaded.id,
+          name: uploaded.name,
+          size: uploaded.size,
+          date: uploaded.createdTime ? uploaded.createdTime.split('T')[0] : new Date().toISOString().split('T')[0],
+          project: targetCode,
+          category: docCategoryInput,
+          status: 'Disetujui',
+          isGDrive: true,
+          webViewLink: uploaded.webViewLink
+        };
+
+        setDocuments(prev => {
+          // Avoid duplicate entries
+          const filtered = prev.filter(d => d.id !== uploaded.id && d.name !== file.name);
+          return [newDoc, ...filtered];
+        });
+
+        setDocUploadFeedback(`✓ Berhasil mengunggah "${file.name}" ke Google Drive pada kategori [${docCategoryInput}]!`);
+        setTimeout(() => setDocUploadFeedback(null), 5000);
+      } catch (err: any) {
+        console.error("Gagal unggah dari tab detail:", err);
+        setDocUploadFeedback(`❌ Gagal: ${err.message || 'Error tidak diketahui'}`);
+        setTimeout(() => setDocUploadFeedback(null), 6000);
+      } finally {
+        setIsUploadingDoc(false);
+      }
+    } else {
+      // Offline local preview fallback
+      const newDoc = {
+        id: `doc-${Date.now()}`,
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        date: new Date().toISOString().split('T')[0],
+        project: targetCode,
+        category: docCategoryInput,
+        status: 'Disetujui',
+        isGDrive: false
+      };
+      setDocuments(prev => [newDoc, ...prev]);
+      setDocUploadFeedback(`✓ Berhasil menambahkan dokumen "${file.name}" secara lokal ke kategori [${docCategoryInput}]! (Sambungkan akun Google Drive untuk menyimpan ke cloud)`);
+      setTimeout(() => setDocUploadFeedback(null), 5000);
+    }
   };
 
   const handleDocDragOver = (e: React.DragEvent) => {
@@ -154,11 +208,28 @@ export default function ProjectDetail({
     }
   };
 
-  const handleDeleteDocForProject = (docId: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus berkas dokumen ini?')) {
-      setDocuments(prev => prev.filter(d => d.id !== docId));
-      setDocUploadFeedback('✓ Dokumen berhasil dihilangkan dari daftar proyek ini.');
-      setTimeout(() => setDocUploadFeedback(null), 3000);
+  const handleDeleteDocForProject = async (docId: string) => {
+    const docToDelete = documents.find(d => d.id === docId);
+    if (!docToDelete) return;
+
+    if (confirm(`Apakah Anda yakin ingin menghapus berkas dokumen "${docToDelete.name}"?`)) {
+      if (docToDelete.isGDrive && googleToken) {
+        setDocUploadFeedback(`⏳ Menghapus berkas dari Google Drive...`);
+        try {
+          await deleteDriveFile(googleToken, docId);
+          setDocuments(prev => prev.filter(d => d.id !== docId));
+          setDocUploadFeedback('✓ Dokumen berhasil dihapus dari Google Drive.');
+        } catch (err: any) {
+          console.error("Gagal menghapus berkas dari Google Drive:", err);
+          setDocUploadFeedback(`❌ Gagal menghapus: ${err.message || 'Error tidak diketahui'}`);
+        } finally {
+          setTimeout(() => setDocUploadFeedback(null), 4000);
+        }
+      } else {
+        setDocuments(prev => prev.filter(d => d.id !== docId));
+        setDocUploadFeedback('✓ Dokumen lokal berhasil dihilangkan.');
+        setTimeout(() => setDocUploadFeedback(null), 3000);
+      }
     }
   };
 
@@ -1894,37 +1965,65 @@ export default function ProjectDetail({
 
               {/* Drag and Drop Zone */}
               <div
-                onDragOver={handleDocDragOver}
-                onDragLeave={handleDocDragLeave}
-                onDrop={handleDocDrop}
-                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2.5 ${
-                  isDocDragging 
-                    ? 'border-sky-500 bg-sky-50/30 ring-4 ring-sky-500/10' 
-                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300'
+                onDragOver={isUploadingDoc ? undefined : handleDocDragOver}
+                onDragLeave={isUploadingDoc ? undefined : handleDocDragLeave}
+                onDrop={isUploadingDoc ? undefined : handleDocDrop}
+                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center gap-2.5 ${
+                  isUploadingDoc
+                    ? 'border-sky-300 bg-sky-25/20 cursor-wait'
+                    : isDocDragging 
+                    ? 'border-sky-500 bg-sky-50/30 ring-4 ring-sky-500/10 cursor-pointer' 
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 cursor-pointer'
                 }`}
-                onClick={() => document.getElementById('project-file-upload-input')?.click()}
+                onClick={() => !isUploadingDoc && document.getElementById('project-file-upload-input')?.click()}
               >
                 <input
                   type="file"
                   id="project-file-upload-input"
                   className="hidden"
+                  disabled={isUploadingDoc}
                   onChange={handleLocalProjectFileUpload}
                 />
                 
-                <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
-                  <Upload className="w-5 h-5" />
-                </div>
+                {isUploadingDoc ? (
+                  <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 animate-pulse">
+                    <svg className="animate-spin h-5 w-5 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                )}
                 
                 <div>
-                  <p className="text-xs font-bold text-slate-700">Tarik berkas ke sini, atau <span className="text-sky-605 text-sky-600">telusuri</span></p>
+                  <p className="text-xs font-bold text-slate-700">
+                    {isUploadingDoc ? 'Sedang mengunggah berkas...' : 'Tarik berkas ke sini, atau '}
+                    {!isUploadingDoc && <span className="text-sky-600">telusuri</span>}
+                  </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">Mendukung berkas PDF, Excel, Word dsb, max 10MB</p>
                 </div>
               </div>
 
               {/* Informative Guidance */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-150 leading-relaxed text-[11px] text-slate-550 block">
-                <span className="font-bold text-slate-700 block mb-0.5 font-sans flex items-center gap-1.5">💡 Sinkronisasi Google Drive Aktif?</span>
-                Demi kedaulatan data instansi DFW, Anda dapat mengaktifkan integrasi Google Drive institusional via tab menu utama <b>Dokumen Pendukung</b> di bagian samping kiri. Berkas yang ditarik/diunggah di sana akan otomatis tersinkron ke cloud drive Anda.
+              <div className="p-3 bg-slate-55 border border-slate-150 rounded-xl leading-relaxed text-[11px] text-slate-550 block">
+                <div className="flex items-center gap-1.5 mb-1 justify-between">
+                  <span className="font-bold text-slate-705 text-slate-700 font-sans">💡 Konektivitas Google Cloud</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${googleToken ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-550 border border-slate-200'}`}>
+                    {googleToken ? '● Terhubung' : 'Lokal'}
+                  </span>
+                </div>
+                {googleToken ? (
+                  <span className="block text-slate-600">
+                    Sistem dalam kondisi <b>Terhubung</b> dengan Google Drive. Berkas yang Anda unggah/tarik di atas akan otomatis disimpan langsung di akun Google Drive institusional Anda di bawah folder proyek ini.
+                  </span>
+                ) : (
+                  <span className="block text-slate-550">
+                    Agar dokumen dapat tersimpan di cloud instansi DFW secara permanen, hubungkan atau sinkronkan akun Google Drive Anda terlebih dahulu via tab menu utama <b>Dokumen Pendukung</b> di sebelah samping kiri.
+                  </span>
+                )}
               </div>
 
             </div>
