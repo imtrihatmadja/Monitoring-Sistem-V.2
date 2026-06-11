@@ -648,6 +648,8 @@ export default function ExtraViews({
         setAuthError('Otorisasi dibatalkan karena jendela pop-up ditutup sebelum selesai. Silakan tekan tombol Otorisasi kembali untuk menghubungkan akun Google Anda.');
       } else if (err.code === 'auth/cancelled-popup-request' || err.message?.includes('cancelled-popup')) {
         setAuthError('Terdapat permintaan masuk lainnya yang sedang berjalan. Jendela otorisasi sebelumnya telah ditutup.');
+      } else if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+        setAuthError('unauthorized-domain');
       } else {
         setAuthError(`Gagal menyambung ke Google Drive: ${err.message || 'Koneksi terinterupsi'}`);
       }
@@ -823,21 +825,109 @@ export default function ExtraViews({
           </div>
         </div>
 
-        {authError && (
-          <div className="bg-rose-50 border border-rose-100 text-rose-800 p-4 rounded-xl flex items-start gap-3 text-xs relative shadow-xs">
-            <span className="text-sm shrink-0">⚠️</span>
-            <div className="flex-1">
-              <p className="font-bold text-rose-900">Kendala Otorisasi Sesi</p>
-              <p className="mt-0.5 leading-relaxed text-rose-700 font-medium">{authError}</p>
+        {!googleToken && (
+          <div id="authorized-domain-pre-check-card" className="bg-slate-50 border border-slate-150 rounded-2xl p-4.5 text-xs text-slate-700 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-800 flex items-center gap-1.5 font-display text-sm">
+                <span>🔑</span> Panduan Penting Sebelum Otorisasi Google Drive
+              </span>
+              <span className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-bold border border-slate-200">Authorized Domains</span>
             </div>
-            <button 
-              onClick={() => setAuthError(null)}
-              className="text-rose-400 hover:text-rose-700 font-bold px-2 py-1 bg-white/60 hover:bg-white rounded-lg transition-colors cursor-pointer shrink-0"
-              title="Tutup Pesan"
-            >
-              Tutup
-            </button>
+            <p className="text-slate-600 leading-relaxed">
+              Firebase Authentication Google Sign-In mewajibkan domain aplikasi Anda didaftarkan terlebih dahulu untuk mencegah pembatasan keamanan browser. Pastikan domain di bawah ini sudah ditambahkan di <b>Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains</b> sebelum mencoba menghubungkan:
+            </p>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex-1 bg-white px-3 py-2 rounded-xl text-slate-800 font-mono text-xs select-all break-all border border-slate-200 flex items-center justify-between">
+                <span>{window.location.hostname}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.hostname);
+                  alert(`✓ Domain berhasil disalin!\nHost: ${window.location.hostname}\n\nMasukkan domain ini ke Firebase Console Anda.`);
+                }}
+                className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 hover:shadow-xs active:scale-[0.98]"
+              >
+                Salin Domain
+              </button>
+            </div>
+            <div className="pt-2 text-[11px] leading-relaxed text-slate-500 border-t border-slate-200/60 block">
+              <span className="font-bold text-slate-700 block mb-0.5">Langkah Cepat di Firebase Console:</span>
+              1. Buka <b>Authentication</b> &gt; tab <b>Settings</b> &gt; <b>Authorized domains</b>.<br />
+              2. Klik <b>Add domain</b>, tempelkan domain yang Anda salin di atas, lalu simpan.<br />
+              3. Tunggu 5-10 detik, lalu Anda siap menekan tombol <b>Otorisasi Google Drive</b> dengan lancar!
+            </div>
           </div>
+        )}
+
+        {authError && (
+          authError === 'unauthorized-domain' ? (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-5 rounded-2xl flex flex-col gap-4 text-xs relative shadow-xs">
+              <div className="flex items-start gap-3">
+                <span className="text-lg shrink-0">🚫</span>
+                <div className="flex-1">
+                  <p className="font-bold text-rose-900 text-sm">Domain Belum Diizinkan (auth/unauthorized-domain)</p>
+                  <p className="mt-1 leading-relaxed text-rose-700">
+                    Firebase Auth mendeteksi bahwa domain aplikasi Anda saat ini belum didaftarkan di daftar <b>Domain yang Diotorisasi (Authorized domains)</b> pada Firebase Console.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setAuthError(null)}
+                  className="text-rose-400 hover:text-rose-700 font-bold px-2.5 py-1 bg-white hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0 border border-rose-100"
+                >
+                  Tutup
+                </button>
+              </div>
+
+              <div className="bg-white/80 rounded-xl p-4 border border-rose-100/50 space-y-3 text-slate-700">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Domain yang Harus Ditambahkan:</span>
+                  <div className="flex items-center gap-2">
+                    <code className="bg-slate-100 px-2.5 py-1 rounded-lg text-slate-800 font-mono text-xs select-all break-all border border-slate-200 flex-1">
+                      {window.location.hostname}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.hostname);
+                        alert('Domain berhasil disalin!');
+                      }}
+                      className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-1 px-3 rounded-lg text-[11px] transition-all cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      Salin Domain
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-1 text-[11px] leading-relaxed text-slate-600 border-t border-slate-100">
+                  <span className="font-bold text-slate-800 block">Cara Menyelesaikan Kendala Ini:</span>
+                  <ol className="list-decimal pl-4.5 space-y-1">
+                    <li>Buka halaman proyek Anda di <b>Firebase Console</b>.</li>
+                    <li>Pilih menu <b>Build</b> &gt; <b>Authentication</b> di navigasi kiri.</li>
+                    <li>Buka tab <b>Settings</b> (Pengaturan) di atas halaman.</li>
+                    <li>Klik opsi <b>Authorized domains</b> (Domain diotorisasi) di kolom sebelah kiri.</li>
+                    <li>Klik tombol <b>Add domain</b> (Tambah domain).</li>
+                    <li>Tempelkan domain yang disalin di atas (<code>{window.location.hostname}</code>) lalu klik <b>Add</b>.</li>
+                    <li>Selesai! Tunggu sekitar 5-10 detik agar sinkronisasi Google aktif, lalu coba otorisasi kembali.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-rose-50 border border-rose-100 text-rose-800 p-4 rounded-xl flex items-start gap-3 text-xs relative shadow-xs">
+              <span className="text-sm shrink-0">⚠️</span>
+              <div className="flex-1">
+                <p className="font-bold text-rose-900">Kendala Otorisasi Sesi</p>
+                <p className="mt-0.5 leading-relaxed text-rose-700 font-medium">{authError}</p>
+              </div>
+              <button 
+                onClick={() => setAuthError(null)}
+                className="text-rose-400 hover:text-rose-700 font-bold px-2 py-1 bg-white/60 hover:bg-white rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Tutup Pesan"
+              >
+                Tutup
+              </button>
+            </div>
+          )
         )}
 
         {/* Upload Setup Form Card */}
