@@ -988,6 +988,7 @@ export default function App() {
           {activeTab === 'reports' && (
             <ExportPanel 
               projects={projects}
+              staff={staff}
             />
           )}
 

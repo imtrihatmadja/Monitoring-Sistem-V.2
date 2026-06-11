@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Project } from '../types';
+import { Project, Staff } from '../types';
 import { 
   FileSpreadsheet, 
   FileText, 
@@ -16,11 +16,29 @@ import {
 
 interface ExportPanelProps {
   projects: Project[];
+  staff?: Staff[];
 }
 
-export default function ExportPanel({ projects }: ExportPanelProps) {
+export default function ExportPanel({ projects, staff = [] }: ExportPanelProps) {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+
+  const staffManagers = staff.filter(s => s.role === 'Project Manager');
+  const staffDirectors = staff.filter(s => s.role === 'Program Director' || s.role === 'Director' || s.name.includes('Imam'));
+
+  const [selectedReporterId, setSelectedReporterId] = useState<string>(() => {
+    // Dian Permatasari is our preferred default PM if available, otherwise any PM
+    const pm = staff.find(s => s.role === 'Project Manager' && s.name.includes('Dian')) || staff.find(s => s.role === 'Project Manager');
+    return pm ? pm.id : '';
+  });
+
+  const [selectedApproverId, setSelectedApproverId] = useState<string>(() => {
+    const pd = staff.find(s => s.role === 'Program Director' || s.role === 'Director' || s.name.includes('Imam'));
+    return pd ? pd.id : '';
+  });
+
+  const currentReporter = staff.find(s => s.id === selectedReporterId) || staff.find(s => s.role === 'Project Manager') || { name: 'Dian Permatasari, M.Si.', role: 'Project Manager' };
+  const currentApprover = staff.find(s => s.id === selectedApproverId) || staff.find(s => s.role === 'Program Director' || s.role === 'Director') || { name: 'Imam Trihatmadja', role: 'Program Director' };
 
   // Helper: get project overall progress
   const calculateProjectProgress = (p: Project): number => {
@@ -190,6 +208,43 @@ export default function ExportPanel({ projects }: ExportPanelProps) {
                   <option key={p.id} value={p.id}>{p.code} - {p.name.substring(0, 30)}...</option>
                 ))}
               </select>
+            </div>
+
+            {/* Penandatangan Dokumen Form Setup */}
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">✍️ Penandatangan Dokumen</span>
+              
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Dilaporkan Oleh (Role Manajer Proyek):</label>
+                <select 
+                  value={selectedReporterId}
+                  onChange={(e) => setSelectedReporterId(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg block w-full p-2 font-bold text-slate-700 focus:outline-sky-600 cursor-pointer"
+                >
+                  {staffManagers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                  ))}
+                  {staffManagers.length === 0 && (
+                    <option value="">-- Pilih PM --</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Disetujui Oleh (Role Program Director):</label>
+                <select 
+                  value={selectedApproverId}
+                  onChange={(e) => setSelectedApproverId(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 text-xs rounded-lg block w-full p-2 font-bold text-slate-700 focus:outline-sky-600 cursor-pointer"
+                >
+                  {staffDirectors.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                  ))}
+                  {staffDirectors.length === 0 && (
+                    <option value="">-- Pilih Program Director --</option>
+                  )}
+                </select>
+              </div>
             </div>
 
             <div className="p-3 bg-slate-50 border rounded-xl space-y-2 text-xs text-slate-500">
@@ -412,14 +467,14 @@ export default function ExportPanel({ projects }: ExportPanelProps) {
               <div>
                 <p className="text-slate-400 uppercase tracking-widest text-[9px] font-bold">Dilaporkan Oleh:</p>
                 <div className="h-16"></div> {/* Spacer for signature */}
-                <p className="font-bold text-slate-800">Dian Permatasari, M.Si.</p>
-                <p className="text-slate-500 font-mono text-[10px]">Manajer Pemantauan Portofolio</p>
+                <p className="font-bold text-slate-800">{currentReporter.name}</p>
+                <p className="text-slate-500 font-mono text-[10px]">{currentReporter.role === 'Project Manager' ? 'Manajer Proyek' : currentReporter.role}</p>
               </div>
               <div>
                 <p className="text-slate-400 uppercase tracking-widest text-[9px] font-bold">Disetujui Oleh:</p>
                 <div className="h-16"></div> {/* Spacer for signature */}
-                <p className="font-bold text-slate-800">Ir. Ahmad Subagio, M.T.</p>
-                <p className="text-slate-500 font-mono text-[10px]">Direktur Pelaksana / Pembina Program</p>
+                <p className="font-bold text-slate-800">{currentApprover.name}</p>
+                <p className="text-slate-500 font-mono text-[10px]">{currentApprover.role === 'Program Director' ? 'Program Director' : currentApprover.role}</p>
               </div>
             </div>
           </div>
