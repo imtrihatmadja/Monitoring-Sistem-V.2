@@ -489,7 +489,7 @@ export default function ExecutiveDashboard({
               <div 
                 key={p.id} 
                 onClick={() => onSelectProject(p.id)}
-                className="bg-white rounded-2xl border border-slate-150 hover:border-sky-350 cursor-pointer shadow-3xs hover:shadow-xs group transition-all flex flex-col justify-between overflow-hidden"
+                className="bg-white rounded-xl border border-slate-150 hover:border-sky-350 cursor-pointer shadow-sm hover:shadow-md group transition-all duration-300 transform hover:scale-[1.005] flex flex-col justify-between overflow-hidden"
               >
                 {/* Header Kartu */}
                 <div className="p-5 space-y-3 pb-4">
@@ -502,27 +502,27 @@ export default function ExecutiveDashboard({
                     </span>
                   </div>
 
-                  <h4 className="text-sm font-black text-slate-800 group-hover:text-sky-650 transition-colors leading-snug">
+                  <h4 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
                     {p.name}
                   </h4>
 
-                  {/* Metadata: Lokasi, PIC, Donor */}
-                  <div className="grid grid-cols-1 gap-1 text-[10px] text-slate-400 bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
-                    <div>📍 <span className="font-semibold text-slate-600">Lokasi:</span> {locationVal}</div>
-                    <div>👤 <span className="font-semibold text-slate-600">PIC:</span> {picVal.split(',')[0]}</div>
-                    <div>🛡 <span className="font-semibold text-slate-600">Donor:</span> {donorVal}</div>
+                  {/* Metadata: Lokasi, PIC, Donor - Rounded Xl and clean typography */}
+                  <div className="grid grid-cols-1 gap-1.5 text-[10.5px] text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div>📍 <span className="font-bold text-slate-700">Lokasi:</span> {locationVal}</div>
+                    <div>👤 <span className="font-bold text-slate-700">PIC:</span> {picVal.split(',')[0]}</div>
+                    <div>📄 <span className="font-bold text-slate-700">Donor:</span> {donorVal}</div>
                   </div>
                 </div>
 
                 {/* Bar Progres */}
-                <div className="px-5 py-3 bg-slate-50/35 border-t border-b border-slate-100 space-y-1.5">
+                <div className="px-5 py-3.5 bg-slate-50/50 border-t border-b border-slate-150/75 space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-400 font-medium">Kumulatif Progres Fisik</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${qColor}`}>
                       {progress}% {qLabel}
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${qProgressColor}`} 
                       style={{ width: `${progress}%` }}
@@ -531,53 +531,53 @@ export default function ExecutiveDashboard({
                 </div>
 
                 {/* Data Anggaran */}
-                <div className="p-5 pt-3 pb-3 text-[11px] grid grid-cols-2 gap-3 border-b border-slate-100">
+                <div className="p-5 pt-3 pb-3 text-[11px] grid grid-cols-2 gap-3 border-b border-slate-150/75">
                   <div className="font-mono">
                     <span className="text-slate-400 font-semibold block text-[9px] uppercase">Anggaran Disetujui</span>
-                    <span className="font-extrabold text-slate-750">{formatRupiah(budgetApproved)}</span>
+                    <span className="font-bold text-slate-800 text-xs">{formatRupiah(budgetApproved)}</span>
                   </div>
                   <div className="font-mono text-right">
                     <span className="text-slate-400 font-semibold block text-[9px] uppercase">Realisasi & Serapan</span>
-                    <span className="font-extrabold text-slate-750 block">{formatRupiah(realization)}</span>
-                    <span className="text-[9px] text-sky-600 font-bold bg-sky-25 border border-sky-100 px-1.5 py-0.2 rounded-sm inline-block mt-0.5">
+                    <span className="font-bold text-slate-800 text-xs block">{formatRupiah(realization)}</span>
+                    <span className="text-[9px] text-sky-700 font-bold bg-sky-50 border border-sky-100 px-1.5 py-0.2 rounded-md inline-block mt-0.5">
                       {serapanPct}% Serapan
                     </span>
                   </div>
                 </div>
 
                 {/* Hierarki Konten (Ikonografi): Goal, Outcomes, Isu */}
-                <div className="p-5 pt-4 pb-4 space-y-3.5 text-xs">
-                  {/* Goal */}
-                  <div className="space-y-1">
-                    <div className="font-bold text-slate-755 flex items-center gap-1.5">
+                <div className="p-5 pt-4 pb-4 space-y-3 font-sans text-xs">
+                  {/* Goal (Biru) */}
+                  <div className="space-y-1 p-3 bg-blue-50/40 hover:bg-blue-50/80 border border-blue-100/60 rounded-xl transition-all">
+                    <div className="font-bold text-blue-700 flex items-center gap-1.5 text-[10.5px] tracking-wider uppercase">
                       <span>🎯</span>
-                      <span>GOAL:</span>
+                      <span>Goal Proyek</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                    <p className="text-[11px] text-slate-700 leading-relaxed font-medium">
                       {goalVal}
                     </p>
                   </div>
 
-                  {/* Outcomes */}
-                  <div className="space-y-1">
-                    <div className="font-bold text-slate-755 flex items-center gap-1.5">
+                  {/* Outcomes (Ungu) */}
+                  <div className="space-y-1 p-3 bg-purple-50/40 hover:bg-purple-50/80 border border-purple-100/60 rounded-xl transition-all">
+                    <div className="font-bold text-purple-700 flex items-center gap-1.5 text-[10.5px] tracking-wider uppercase">
                       <span>🏆</span>
-                      <span>EXPECTED OUTCOMES:</span>
+                      <span>Expected Outcomes</span>
                     </div>
-                    <ul className="list-disc pl-4 text-[10.5px] text-slate-500 space-y-1 leading-normal font-medium">
-                      {outcomesList.map((oc, i) => (
-                        <li key={i}>{oc}</li>
+                    <ul className="list-disc pl-4 text-[10.5px] text-slate-700 space-y-1 leading-normal font-medium">
+                      {outcomesList.map((oc, idx) => (
+                        <li key={idx}>{oc}</li>
                       ))}
                     </ul>
                   </div>
 
-                  {/* Prioritas / Isu */}
-                  <div className="space-y-1">
-                    <div className="font-bold text-rose-700 flex items-center gap-1.5">
+                  {/* Prioritas / Isu (Merah) */}
+                  <div className="space-y-1 p-3 bg-rose-50/40 hover:bg-rose-50 border border-rose-100/60 rounded-xl transition-all">
+                    <div className="font-bold text-rose-700 flex items-center gap-1.5 text-[10.5px] tracking-wider uppercase">
                       <span>⚠️</span>
-                      <span>HAMBATAN / ISU PRIORITAS:</span>
+                      <span>Hambatan / Isu Kritis</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed italic bg-rose-25/40 border border-rose-100/40 p-2 rounded-xl">
+                    <p className="text-[11px] text-slate-700 leading-relaxed italic">
                       {prioritizedIssueVal}
                     </p>
                   </div>

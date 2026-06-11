@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Project, CurrentIssue, LessonLearned } from '../types';
+import { Project, CurrentIssue, LessonLearned, Staff } from '../types';
 import { verifySupabaseSchema, dbFetchExternalIssues, dbSaveAllExternalIssues } from '../lib/supabaseClient';
 import { 
   FileText, 
@@ -20,14 +20,20 @@ import {
   Clock,
   Heart,
   TrendingUp,
-  X
+  X,
+  Mail,
+  Phone
 } from 'lucide-react';
+import AddStaffModal from './AddStaffModal';
 
 interface ExtraViewsProps {
   activeTab: string;
   projects: Project[];
   onSelectProject: (id: string) => void;
   onUpdateProject?: (p: Project) => void;
+  staff?: Staff[];
+  onAddStaff?: (s: Staff) => void;
+  onDeleteStaff?: (id: string) => void;
 }
 
 interface Beneficiary {
@@ -44,8 +50,17 @@ interface Beneficiary {
   vulnerable: boolean;
 }
 
-export default function ExtraViews({ activeTab, projects, onSelectProject, onUpdateProject }: ExtraViewsProps) {
+export default function ExtraViews({ 
+  activeTab, 
+  projects, 
+  onSelectProject, 
+  onUpdateProject,
+  staff = [],
+  onAddStaff,
+  onDeleteStaff
+}: ExtraViewsProps) {
   // Database Penerima Manfaat State
+  const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(false);
   const [selectedProjFilter, setSelectedProjFilter] = useState<string>(''); // empty means All Projects
   const [beneficiarySearch, setBeneficiarySearch] = useState<string>('');
   const [showManualModal, setShowManualModal] = useState<boolean>(false);
@@ -1817,84 +1832,54 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
 
   // 5. RENDER TAB: STAFF & BEBAN KERJA
   if (activeTab === 'workload') {
-    // Generate staffList dynamically from actual database projects
-    interface StaffData {
-      name: string;
-      roles: Set<string>;
-      projectCodes: Set<string>;
-      taskCount: number;
-      activeTaskCount: number;
-    }
+    const staffList = staff.map(s => {
+      let projectsCount = 0;
+      let taskCount = 0;
+      let activeTasks = 0;
+      let roles = new Set<string>();
 
-    const staffMap = new Map<string, StaffData>();
-
-    const getOrCreateStaff = (nameStr: string): StaffData => {
-      const trimmedName = nameStr.trim();
-      const lookupKey = trimmedName.toLowerCase();
-      if (!staffMap.has(lookupKey)) {
-        staffMap.set(lookupKey, {
-          name: trimmedName,
-          roles: new Set<string>(),
-          projectCodes: new Set<string>(),
-          taskCount: 0,
-          activeTaskCount: 0
-        });
-      }
-      return staffMap.get(lookupKey)!;
-    };
-
-    projects.forEach(p => {
-      if (p.manager && p.manager.trim() && p.manager !== '-') {
-        const staff = getOrCreateStaff(p.manager);
-        staff.roles.add(`Manajer Proyek (${p.code})`);
-        staff.projectCodes.add(p.code);
-      }
-      if (p.pic && p.pic.trim() && p.pic !== '-' && p.pic !== p.manager) {
-        const staff = getOrCreateStaff(p.pic);
-        staff.roles.add(`PIC Lapangan (${p.code})`);
-        staff.projectCodes.add(p.code);
-      }
-      if (p.activities) {
-        p.activities.forEach(act => {
-          if (act.subActivities) {
-            act.subActivities.forEach(sub => {
-              if (sub.assignedTo && sub.assignedTo.trim() && sub.assignedTo !== '-') {
-                const staff = getOrCreateStaff(sub.assignedTo);
-                staff.projectCodes.add(p.code);
-                staff.taskCount += 1;
-                if (sub.status !== 'Selesai') {
-                  staff.activeTaskCount += 1;
+      projects.forEach(p => {
+        let isAssignedInProject = false;
+        if (p.manager && p.manager.toLowerCase().trim() === s.name.toLowerCase().trim()) {
+          isAssignedInProject = true;
+          roles.add(`Manager (${p.code})`);
+        }
+        if (p.pic && p.pic.toLowerCase().trim() === s.name.toLowerCase().trim()) {
+          isAssignedInProject = true;
+          roles.add(`PIC (${p.code})`);
+        }
+        if (p.activities) {
+          p.activities.forEach(act => {
+            if (act.subActivities) {
+              act.subActivities.forEach(sub => {
+                if (sub.assignedTo && sub.assignedTo.toLowerCase().trim() === s.name.toLowerCase().trim()) {
+                  isAssignedInProject = true;
+                  taskCount += 1;
+                  if (sub.status !== 'Selesai') {
+                    activeTasks += 1;
+                  }
+                  roles.add(`Teknis (${p.code})`);
                 }
-                staff.roles.add(`Pelaksana Teknis (${p.code})`);
-              }
-            });
-          }
-        });
-      }
-    });
+              });
+            }
+          });
+        }
 
-    const staffList = Array.from(staffMap.values()).map(staff => {
-      const rolesArr = Array.from(staff.roles);
+        if (isAssignedInProject) {
+          projectsCount += 1;
+        }
+      });
+
+      const rolesArr = Array.from(roles);
       let roleDisplay = '';
-      if (rolesArr.some(r => r.startsWith('Manajer Proyek'))) {
-        const mgrRoles = rolesArr.filter(r => r.startsWith('Manajer Proyek'));
-        roleDisplay = mgrRoles.join(', ');
-      } else if (rolesArr.some(r => r.startsWith('PIC'))) {
-        const picRoles = rolesArr.filter(r => r.startsWith('PIC'));
-        roleDisplay = picRoles.join(', ');
-      } else if (rolesArr.length > 0) {
+      if (rolesArr.length > 0) {
         roleDisplay = rolesArr.slice(0, 2).join(', ');
         if (rolesArr.length > 2) roleDisplay += '...';
       } else {
-        roleDisplay = 'Koordinator Lapangan / Pelaksana';
+        roleDisplay = '-';
       }
 
-      const projectsCount = staff.projectCodes.size;
-      const tasksCount = staff.taskCount;
-      const activeTasks = staff.activeTaskCount;
-      
       const calculatedWorkload = Math.max(15, Math.min(98, (projectsCount * 25) + (activeTasks * 12)));
-      
       let statusStr = 'Optimal';
       if (calculatedWorkload > 85) statusStr = 'Kritis';
       else if (calculatedWorkload > 65) statusStr = 'Padat';
@@ -1902,17 +1887,27 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
       else statusStr = 'Mengawasi';
 
       return {
-        name: staff.name,
+        id: s.id,
+        name: s.name,
         role: roleDisplay,
+        registeredRole: s.role,
+        email: s.email,
+        phone: s.phone,
         projects: projectsCount,
-        taskCount: tasksCount,
+        taskCount: taskCount,
         workload: calculatedWorkload,
         status: statusStr
       };
     });
 
+    const handleDeleteClick = (id: string, name: string) => {
+      if (window.confirm(`Apakah Anda yakin ingin menghapus staff "${name}" dari sistem internal?`)) {
+        if (onDeleteStaff) onDeleteStaff(id);
+      }
+    };
+
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 leading-normal">
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1924,72 +1919,113 @@ export default function ExtraViews({ activeTab, projects, onSelectProject, onUpd
                 Pemantauan penyebaran tugas, tanggung jawab, dan estimasi beban kerja bagi tim teknis serta field officer di lapangan secara berkala.
               </p>
             </div>
-            <div className="bg-sky-50 text-sky-800 border border-sky-100 px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 font-semibold">
-              <UserCheck className="w-4 h-4 text-sky-600" />
-              <span>{staffList.length} Staff Aktif Terdeteksi</span>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                id="btn-tambah-staff"
+                type="button"
+                onClick={() => setShowAddStaffModal(true)}
+                className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-sky-600/15 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Registrasi Staff Baru
+              </button>
+              <div className="bg-sky-50 text-sky-850 border border-sky-100 px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 font-semibold">
+                <UserCheck className="w-4 h-4 text-sky-600" />
+                <span>{staffList.length} Staff Terdaftar</span>
+              </div>
             </div>
           </div>
 
           {staffList.length === 0 ? (
             <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-12 px-6 text-center text-slate-400">
               <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-              <span className="text-sm font-bold block text-slate-700">Belum Ada Staff Terdeteksi</span>
+              <span className="text-sm font-bold block text-slate-700 font-display">Belum Ada Staff Terdaftar</span>
               <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">
-                Staff secara otomatis dideteksi dari nama <b>Manajer Proyek</b>, <b>PIC Lapangan</b>, atau penanggung jawab <b>Sub-Aktivitas</b> pada proyek rill Anda. Silakan isi terlebih dahulu proyek baru Anda atau pulihkan data demo.
+                Silakan isi daftar staff internal terlebih dahulu dengan menekan tombol <b>Registrasi Staff Baru</b> di atas untuk memetakan penugasan.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full text-left text-xs bg-white">
-                <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-105">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-205">
                   <tr>
                     <th className="p-3.5 text-[11px] uppercase tracking-wider">Nama Staff Pelaksana</th>
-                    <th className="p-3.5 text-[11px] uppercase tracking-wider">Gelar / Penugasan Terkait</th>
+                    <th className="p-3.5 text-[11px] uppercase tracking-wider">Spesialisasi & Peran Aktif</th>
                     <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Jumlah Proyek</th>
                     <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Total Sub-Aktivitas</th>
                     <th className="p-3.5 text-[11px] uppercase tracking-wider">Metrik Beban Kerja</th>
                     <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Kesibukan</th>
+                    <th className="p-3.5 text-center text-[11px] uppercase tracking-wider">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                {staffList.map((staff, idx) => {
-                  let alertBg = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
-                  if (staff.status === 'Optimal') alertBg = 'bg-sky-50 text-sky-700 border border-sky-100';
-                  if (staff.status === 'Padat') alertBg = 'bg-amber-50 text-amber-700 border border-amber-100';
-                  if (staff.status === 'Kritis') alertBg = 'bg-rose-50 text-rose-700 border border-rose-100';
+                  {staffList.map((s, idx) => {
+                    let alertBg = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+                    if (s.status === 'Optimal') alertBg = 'bg-sky-50 text-sky-700 border border-sky-100';
+                    if (s.status === 'Padat') alertBg = 'bg-amber-50 text-amber-700 border border-amber-100';
+                    if (s.status === 'Kritis') alertBg = 'bg-rose-50 text-rose-700 border border-rose-100';
 
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="p-3.5 font-bold text-slate-800">{staff.name}</td>
-                      <td className="p-3.5 text-slate-500">{staff.role}</td>
-                      <td className="p-3.5 text-center font-mono font-bold text-slate-600">{staff.projects} Proyek</td>
-                      <td className="p-3.5 text-center font-mono text-slate-500">{staff.taskCount} Pekerjaan</td>
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] font-bold text-slate-700 w-10 shrink-0">{staff.workload}%</span>
-                          <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden shrink-0">
-                            <div 
-                              className={`h-full rounded-full ${
-                                staff.workload > 90 ? 'bg-rose-500' : staff.workload > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                              }`} 
-                              style={{ width: `${staff.workload}%` }}
-                            ></div>
+                    return (
+                      <tr key={s.id || idx} className="hover:bg-slate-50/50 transition-all">
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-800 text-sm">{s.name}</div>
+                          <div className="flex flex-col gap-0.5 mt-0.5 text-[10px] text-slate-450 font-medium">
+                            {s.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-400" /> {s.email}</span>}
+                            {s.phone && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" /> {s.phone}</span>}
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-3.5 text-center">
-                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-lg ${alertBg}`}>
-                          {staff.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="font-semibold text-slate-700 text-xs block">{s.registeredRole}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">Aktif: {s.role}</span>
+                        </td>
+                        <td className="p-3.5 text-center font-mono font-bold text-slate-600">{s.projects} Proyek</td>
+                        <td className="p-3.5 text-center font-mono text-slate-505">{s.taskCount} Pekerjaan</td>
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[11px] font-bold text-slate-705 w-10 shrink-0">{s.workload}%</span>
+                            <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden shrink-0">
+                              <div 
+                                className={`h-full rounded-full ${
+                                  s.workload > 90 ? 'bg-rose-500' : s.workload > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`} 
+                                style={{ width: `${s.workload}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-lg ${alertBg}`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClick(s.id, s.name)}
+                            className="p-1 px-2 text-rose-500 bg-rose-50 hover:bg-rose-100 border border-rose-100 hover:border-rose-200 rounded-lg transition-all cursor-pointer inline-flex items-center gap-1"
+                            title="Hapus Staff"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
+
+        {/* Floating Modal add Staff */}
+        {showAddStaffModal && (
+          <AddStaffModal 
+            onClose={() => setShowAddStaffModal(false)}
+            onAddStaff={(newS) => {
+              if (onAddStaff) onAddStaff(newS);
+            }}
+          />
+        )}
       </div>
     );
   }

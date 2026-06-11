@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Project, Activity, SubActivity, ProjectIndicator } from '../types';
+import { Project, Activity, SubActivity, ProjectIndicator, Staff } from '../types';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -50,6 +50,7 @@ interface ProjectDetailProps {
   onTriggerAlert: (projectName: string, indicatorName: string, value: number, target: number, unit: string, thresholdAlert: number) => void;
   onAddProject?: (newProject: Project) => void;
   onAddProjects?: (newProjects: Project[]) => void;
+  staff?: Staff[];
 }
 
 export default function ProjectDetail({ 
@@ -59,7 +60,8 @@ export default function ProjectDetail({
   onUpdateProject,
   onTriggerAlert,
   onAddProject,
-  onAddProjects
+  onAddProjects,
+  staff = []
 }: ProjectDetailProps) {
 
   const project = projects.find(p => p.id === selectedProjectId) || projects[0] || {
@@ -1335,13 +1337,26 @@ export default function ProjectDetail({
                         {/* Edit PIC */}
                         <div className="md:col-span-2 flex flex-col gap-1 w-full">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tim / PIC:</label>
-                          <input
-                            type="text"
-                            value={editSubAssigned}
-                            onChange={(e) => setEditSubAssigned(e.target.value)}
-                            className="bg-white border rounded px-2.5 py-1.5 text-xs w-full focus:ring-1 focus:ring-sky-500 text-slate-700 font-medium"
-                            placeholder="Nama penanggung jawab"
-                          />
+                          {staff.length > 0 ? (
+                            <select
+                              value={editSubAssigned}
+                              onChange={(e) => setEditSubAssigned(e.target.value)}
+                              className="bg-white border rounded px-2.5 py-1.5 text-xs w-full focus:ring-1 focus:ring-sky-500 text-slate-700 font-medium cursor-pointer"
+                            >
+                              <option value="">-- Pilih PIC Pelaksana --</option>
+                              {staff.map(s => (
+                                <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={editSubAssigned}
+                              onChange={(e) => setEditSubAssigned(e.target.value)}
+                              className="bg-white border rounded px-2.5 py-1.5 text-xs w-full focus:ring-1 focus:ring-sky-500 text-slate-700 font-medium"
+                              placeholder="Nama penanggung jawab"
+                            />
+                          )}
                         </div>
 
                         {/* Edit Dates */}
@@ -1461,13 +1476,26 @@ export default function ProjectDetail({
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-500 block">Person In Charge (PIC):</label>
-                            <input 
-                              type="text"
-                              value={newSubAssigned}
-                              onChange={(e) => setNewSubAssigned(e.target.value)}
-                              className="bg-white border rounded p-1.5 text-xs w-full font-semibold"
-                              placeholder="e.g. Ir. Joni (Pengawas Sipil)..."
-                            />
+                            {staff.length > 0 ? (
+                              <select
+                                value={newSubAssigned}
+                                onChange={(e) => setNewSubAssigned(e.target.value)}
+                                className="bg-white border rounded p-1.5 text-xs w-full font-semibold focus:outline-sky-500 cursor-pointer"
+                              >
+                                <option value="">-- Pilih PIC Pelaksana --</option>
+                                {staff.map(s => (
+                                  <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input 
+                                type="text"
+                                value={newSubAssigned}
+                                onChange={(e) => setNewSubAssigned(e.target.value)}
+                                className="bg-white border rounded p-1.5 text-xs w-full font-semibold"
+                                placeholder="e.g. Ir. Joni (Pengawas Sipil)..."
+                              />
+                            )}
                           </div>
                         </div>
 
@@ -2225,13 +2253,26 @@ export default function ProjectDetail({
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Manajer Proyek (PIC Utama):</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Dr. H. Abdul Rasyid, M.Si."
-                      value={pManager}
-                      onChange={(e) => setPManager(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
-                    />
+                    {staff.length > 0 ? (
+                      <select
+                        value={pManager}
+                        onChange={(e) => setPManager(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-705 transition-colors cursor-pointer"
+                      >
+                        <option value="">-- Pilih Manajer Proyek --</option>
+                        {staff.map(s => (
+                          <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Dr. H. Abdul Rasyid, M.Si."
+                        value={pManager}
+                        onChange={(e) => setPManager(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                      />
+                    )}
                   </div>
                 </div>
 

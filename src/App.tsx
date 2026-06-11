@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Project, SystemAlert } from './types';
+import { Project, SystemAlert, Staff } from './types';
 import { INITIAL_PROJECTS, INITIAL_ALERTS } from './initialData';
 import ExecutiveDashboard from './components/ExecutiveDashboard';
 import ProjectDetail from './components/ProjectDetail';
 import ExportPanel from './components/ExportPanel';
 import ExtraViews from './components/ExtraViews';
+import AddStaffModal from './components/AddStaffModal';
 import { 
   verifySupabaseSchema, 
   dbFetchProjects, 
@@ -41,15 +42,33 @@ import {
   Printer,
   ChevronDown,
   Database,
-  Trash2
+  Trash2,
+  UserPlus
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+
+const INITIAL_STAFF: Staff[] = [
+  { id: 'st-1', name: 'Ir. Ahmad Subagio, M.T.', role: 'Project Manager', email: 'ahmad.subagio@dfw.or.id', phone: '0812-3456-7890', registeredAt: '2026-01-01' },
+  { id: 'st-2', name: 'Dian Permatasari, M.Si.', role: 'Project Manager', email: 'dian.permatasari@dfw.or.id', phone: '0813-9876-5432', registeredAt: '2026-01-05' },
+  { id: 'st-3', name: 'drg. Luh Putu Citrawati, M.Kes.', role: 'Project Manager', email: 'luhputu.citrawati@dfw.or.id', phone: '0811-1223-3445', registeredAt: '2026-01-10' },
+  { id: 'st-4', name: 'Danang Prasetyo', role: 'Software & IoT Engineer', email: 'danang.prasetyo@dfw.or.id', phone: '0857-4455-6677', registeredAt: '2026-01-15' },
+  { id: 'st-5', name: 'Andi Nurhaliza', role: 'Field Officer', email: 'andi.nurhaliza@dfw.or.id', phone: '0815-5566-7788', registeredAt: '2026-01-15' },
+  { id: 'st-6', name: 'Ir. Samuel Nababan', role: 'Field Officer', email: 'samuel.nababan@dfw.or.id', phone: '0821-2233-4455', registeredAt: '2026-02-01' },
+  { id: 'st-7', name: 'Hafiz Prasada (Sipil Air)', role: 'Sipil Air Engineer', email: 'hafiz.prasada@dfw.or.id', phone: '0852-6677-8899', registeredAt: '2026-02-15' },
+  { id: 'st-8', name: 'Imam Trihatmadja', role: 'Program Director', email: 'imam.trihatmadja@dfw.or.id', phone: '0812-1111-2222', registeredAt: '2026-01-01' },
+  { id: 'st-9', name: 'Ayu Rikza', role: 'Field Officer', email: 'ayu.rikza@dfw.or.id', phone: '0813-3333-4444', registeredAt: '2026-03-01' }
+];
 
 export default function App() {
   // 1. Core States Hydration
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem('monitoring_projects');
     return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+  });
+
+  const [staff, setStaff] = useState<Staff[]>(() => {
+    const saved = localStorage.getItem('monitoring_staff');
+    return saved ? JSON.parse(saved) : INITIAL_STAFF;
   });
 
   const [alerts, setAlerts] = useState<SystemAlert[]>(() => {
@@ -81,6 +100,7 @@ export default function App() {
   const [supabaseLoading, setSupabaseLoading] = useState<boolean>(true);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
   const [showSupabaseSetupModal, setShowSupabaseSetupModal] = useState<boolean>(false);
+  const [appShowAddStaff, setAppShowAddStaff] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
   // Load initial data from Supabase Cloud on Mount
@@ -160,6 +180,10 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    localStorage.setItem('monitoring_staff', JSON.stringify(staff));
+  }, [staff]);
+
+  useEffect(() => {
     localStorage.setItem('monitoring_selected_project_id', selectedProjectId);
   }, [selectedProjectId]);
 
@@ -188,6 +212,14 @@ export default function App() {
     const autoProject = updateProjectStatusBasedOnIndicators(updatedProject);
     
     setProjects(prev => prev.map(p => p.id === autoProject.id ? autoProject : p));
+  };
+
+  const handleAddStaff = (newStaff: Staff) => {
+    setStaff(prev => [...prev, newStaff]);
+  };
+
+  const handleDeleteStaff = (staffId: string) => {
+    setStaff(prev => prev.filter(s => s.id !== staffId));
   };
 
   // Callback to programmatically trigger a system alert when indicators drop below baseline
@@ -384,15 +416,15 @@ export default function App() {
       </AnimatePresence>
 
       {/* 2. RESPONSIVE MOBILE TOP BAR */}
-      <div id="mobile-top-bar" className="fixed top-0 left-0 right-0 h-14 bg-slate-900 text-white flex items-center justify-between px-4 z-40 md:hidden print-hidden">
-        <button onClick={() => setIsSidebarOpen(true)} className="p-1 hover:bg-slate-800 rounded">
+      <div id="mobile-top-bar" className="fixed top-0 left-0 right-0 h-14 bg-[#0B1528] text-white flex items-center justify-between px-4 z-40 md:hidden print-hidden border-b border-[#1D2B44]">
+        <button onClick={() => setIsSidebarOpen(true)} className="p-1 hover:bg-[#1E2E4A] rounded">
           <Menu className="w-6 h-6" />
         </button>
-        <span className="font-display font-extrabold text-xs tracking-wider uppercase">
+        <span className="font-sans font-extrabold text-xs tracking-wider uppercase">
           DFW • INDIKATOR SISTEM MONITORING
         </span>
         <div className="relative">
-          <button onClick={() => { setActiveTab('alerts'); setIsSidebarOpen(false); }} className="p-1 rounded hover:bg-slate-800">
+          <button onClick={() => { setActiveTab('alerts'); setIsSidebarOpen(false); }} className="p-1 rounded hover:bg-[#1E2E4A]">
             <Bell className="w-5 h-5" />
             {unreadAlertsCount > 0 && (
               <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
@@ -413,7 +445,7 @@ export default function App() {
       {/* Main Sidebar Component Container */}
       <div 
         id="app-sidebar"
-        className={`fixed md:sticky top-0 bottom-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col justify-between p-5/ pt-16 md:pt-5 z-45 shrink-0 border-r border-slate-800 transform md:transform-none transition-transform duration-300 md:h-screen print-hidden ${
+        className={`fixed md:sticky top-0 bottom-0 left-0 w-64 bg-[#0B1528] text-slate-300 flex flex-col justify-between p-5/ pt-16 md:pt-5 z-45 shrink-0 border-r border-[#1D2B44] transform md:transform-none transition-transform duration-300 md:h-screen print-hidden ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
@@ -421,11 +453,11 @@ export default function App() {
         <div className="p-5 pb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-8 h-8 bg-sky-500 text-slate-900 rounded-xl flex items-center justify-center font-bold text-base font-display shadow-indigo-500/20 shadow-lg">
+              <span className="w-8 h-8 bg-sky-500 text-slate-900 rounded-xl flex items-center justify-center font-bold text-base font-sans shadow-sky-500/20 shadow-lg">
                 ★
               </span>
               <div>
-                <h2 className="font-display font-extrabold text-[#f8fafc] text-sm tracking-tight uppercase leading-tight">
+                <h2 className="font-sans font-extrabold text-[#f8fafc] text-sm tracking-tight uppercase leading-tight">
                   DFW PRO-MONITOR
                 </h2>
                 <span className="text-[10px] text-slate-500 font-mono font-bold tracking-widest block">
@@ -439,8 +471,8 @@ export default function App() {
           </div>
 
           {/* User profile details info */}
-          <div className="mt-5 p-3.5 bg-slate-800/60 rounded-2xl border border-slate-700/50 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-sky-200 border border-sky-300 text-sky-900 font-bold flex items-center justify-center text-xs shrink-0 font-display">
+          <div className="mt-5 p-3.5 bg-[#17253F]/50 rounded-xl border border-[#203254]/50 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-sky-200 border border-sky-300 text-sky-900 font-bold flex items-center justify-center text-xs shrink-0 font-sans">
               IT
             </div>
             <div className="min-w-0">
@@ -454,17 +486,17 @@ export default function App() {
 
         {/* Middle Sidebar Nav List */}
         <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <span className="text-[10px] font-bold text-slate-505 uppercase tracking-widest px-3 block mb-1 font-display">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 block mb-2 font-sans">
             MENU UTAMA
           </span>
 
           <button 
             id="nav-executive"
             onClick={() => { setActiveTab('executive'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'executive' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -478,10 +510,10 @@ export default function App() {
             <button 
               id="nav-projects"
               onClick={() => { setActiveTab('projects'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
                 activeTab === 'projects' 
-                  ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                  : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
               }`}
             >
               <div className="flex items-center gap-2.5">
@@ -492,7 +524,7 @@ export default function App() {
             </button>
 
             {/* Sub-menu of Specific Projects with rapid indicator colors */}
-            <div className="pl-6 pr-2 py-0.5 space-y-1 mt-0.5 border-l border-slate-800/60 ml-5">
+            <div className="pl-6 pr-2 py-0.5 space-y-1 mt-0.5 border-l border-[#1D2B44] ml-5">
               {projects.map((p) => {
                 const isSelected = activeTab === 'projects' && selectedProjectId === p.id;
                 let statusColor = 'bg-emerald-500'; // Sesuai Rencana / Aktif
@@ -509,8 +541,8 @@ export default function App() {
                     }}
                     className={`w-full text-left truncate px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 transition-all cursor-pointer ${
                       isSelected 
-                        ? 'bg-slate-800 text-sky-400 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-350 hover:bg-slate-800/20'
+                        ? 'bg-[#15233C] text-sky-400 shadow-xs' 
+                        : 'text-slate-550 hover:text-slate-200 hover:bg-[#15233C]/40'
                     }`}
                     title={p.name}
                   >
@@ -525,10 +557,10 @@ export default function App() {
           <button 
             id="nav-documents"
             onClick={() => { setActiveTab('documents'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'documents' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -541,10 +573,10 @@ export default function App() {
           <button 
             id="nav-beneficiaries"
             onClick={() => { setActiveTab('beneficiaries'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'beneficiaries' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -557,10 +589,10 @@ export default function App() {
           <button 
             id="nav-issues"
             onClick={() => { setActiveTab('issues'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'issues' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -573,10 +605,10 @@ export default function App() {
           <button 
             id="nav-archives"
             onClick={() => { setActiveTab('archives'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'archives' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -586,33 +618,46 @@ export default function App() {
             <ChevronRight className="w-4 h-4 opacity-70" />
           </button>
 
-          <button 
-            id="nav-workload"
-            onClick={() => { setActiveTab('workload'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'workload' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Briefcase className="w-4.5 h-4.5" />
-              <span>Staff & Beban Kerja</span>
-            </div>
-            <ChevronRight className="w-4 h-4 opacity-70" />
-          </button>
+          <div className="relative group/nav-item flex items-center w-full">
+            <button 
+              id="nav-workload"
+              onClick={() => { setActiveTab('workload'); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between pl-3 pr-10 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
+                activeTab === 'workload' 
+                  ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                  : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Briefcase className="w-4.5 h-4.5" />
+                <span>Staff & Beban Kerja</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setAppShowAddStaff(true);
+              }}
+              title="Registrasi Staff Baru"
+              className="absolute right-2.5 p-1 text-sky-400 hover:text-sky-305 hover:bg-[#1E2E4A] rounded-lg transition-all z-15 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          </div>
 
-          <span className="text-[10px] font-bold text-slate-505 uppercase tracking-widest px-3 block pt-2 mb-1 font-display">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 block pt-3 mb-1 font-sans">
             SISTEM MANAJERIAL
           </span>
 
           <button 
             id="nav-reports"
             onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'reports' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -627,10 +672,10 @@ export default function App() {
           <button 
             id="nav-alerts"
             onClick={() => { setActiveTab('alerts'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-display text-xs font-bold transition-all cursor-pointer ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-sans text-xs font-bold transition-all cursor-pointer border-l-4 ${
               activeTab === 'alerts' 
-                ? 'bg-sky-600 text-[#f8fafc] shadow-sky-600/10 shadow-lg border-l-4 border-white' 
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/15 border-sky-400 pl-2.5 scale-[1.01]' 
+                : 'text-slate-400 hover:bg-[#15233C] hover:text-[#f8fafc] border-transparent hover:border-slate-500/50 pl-2.5'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -882,6 +927,7 @@ export default function App() {
                   setSelectedProjectId(newProjects[newProjects.length - 1].id);
                 }
               }}
+              staff={staff}
             />
           )}
 
@@ -896,6 +942,9 @@ export default function App() {
               projects={projects}
               onSelectProject={(id) => { setSelectedProjectId(id); setActiveTab('projects'); }}
               onUpdateProject={handleUpdateProject}
+              staff={staff}
+              onAddStaff={handleAddStaff}
+              onDeleteStaff={handleDeleteStaff}
             />
           )}
 
@@ -1170,6 +1219,13 @@ export default function App() {
             <span>Koneksikan Supabase 🔌</span>
           </button>
         </div>
+      )}
+
+      {appShowAddStaff && (
+        <AddStaffModal 
+          onClose={() => setAppShowAddStaff(false)}
+          onAddStaff={handleAddStaff}
+        />
       )}
 
     </div>

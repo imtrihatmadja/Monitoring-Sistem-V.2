@@ -102,3 +102,12 @@ export interface SystemAlert {
   unit: string;
   read: boolean;
 }
+
+export interface Staff {
+  id: string;
+  name: string;
+  role: string;
+  email?: string;
+  phone?: string;
+  registeredAt?: string;
+}
