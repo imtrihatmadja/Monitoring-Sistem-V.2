@@ -471,8 +471,8 @@ export default function ExecutiveDashboard({
             };
 
             const budgetApproved = p.budget;
-            const realization = p.budgetRealization || Math.round(p.budget * 0.78);
-            const serapanPct = Math.round((realization / budgetApproved) * 100);
+            const realization = typeof p.budgetRealization === 'number' ? p.budgetRealization : Math.round(p.budget * 0.78);
+            const serapanPct = budgetApproved > 0 ? Math.round((realization / budgetApproved) * 100) : 0;
 
             // Metadata field fallbacks
             const locationVal = p.location || 'Kepulauan Luwu, Sulawesi Selatan';

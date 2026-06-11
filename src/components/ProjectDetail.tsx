@@ -42,7 +42,8 @@ import {
   Search,
   ExternalLink,
   File,
-  Download
+  Download,
+  Edit
 } from 'lucide-react';
 import ImportProjectModal from './ImportProjectModal';
 import { getAccessToken, initAuth } from '../lib/firebaseAuth';
@@ -56,6 +57,7 @@ interface ProjectDetailProps {
   onTriggerAlert: (projectName: string, indicatorName: string, value: number, target: number, unit: string, thresholdAlert: number) => void;
   onAddProject?: (newProject: Project) => void;
   onAddProjects?: (newProjects: Project[]) => void;
+  onDeleteProject?: (id: string) => void;
   staff?: Staff[];
   documents?: any[];
   setDocuments?: React.Dispatch<React.SetStateAction<any[]>>;
@@ -69,6 +71,7 @@ export default function ProjectDetail({
   onTriggerAlert,
   onAddProject,
   onAddProjects,
+  onDeleteProject,
   staff = [],
   documents = [],
   setDocuments = () => {}
@@ -229,6 +232,124 @@ export default function ProjectDetail({
         setDocuments(prev => prev.filter(d => d.id !== docId));
         setDocUploadFeedback('✓ Dokumen lokal berhasil dihilangkan.');
         setTimeout(() => setDocUploadFeedback(null), 3000);
+      }
+    }
+  };
+
+  // Edit Project States
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editPName, setEditPName] = useState('');
+  const [editPCode, setEditPCode] = useState('');
+  const [editPDept, setEditPDept] = useState('');
+  const [editPManager, setEditPManager] = useState('');
+  const [editPDonor, setEditPDonor] = useState('');
+  const [editPLocation, setEditPLocation] = useState('');
+  const [editPBudget, setEditPBudget] = useState<string | number>(0);
+  const [editPBudgetRealization, setEditPBudgetRealization] = useState<string | number>(0);
+  const [editPStartDate, setEditPStartDate] = useState('');
+  const [editPEndDate, setEditPEndDate] = useState('');
+  const [editPDesc, setEditPDesc] = useState('');
+  const [editPGoal, setEditPGoal] = useState('');
+  const [editPOutcomes, setEditPOutcomes] = useState<string[]>([]);
+
+  // Inline Quick Realization State
+  const [isEditingRealizationInline, setIsEditingRealizationInline] = useState(false);
+  const [inlineRealizationValue, setInlineRealizationValue] = useState('');
+
+  const handleEditModalAddOutcome = () => {
+    setEditPOutcomes([...editPOutcomes, '']);
+  };
+
+  const handleEditModalUpdateOutcome = (index: number, val: string) => {
+    const updated = [...editPOutcomes];
+    updated[index] = val;
+    setEditPOutcomes(updated);
+  };
+
+  const handleEditModalRemoveOutcome = (index: number) => {
+    if (editPOutcomes.length <= 1) {
+      const updated = [...editPOutcomes];
+      updated[0] = '';
+      setEditPOutcomes(updated);
+    } else {
+      setEditPOutcomes(editPOutcomes.filter((_, idx) => idx !== index));
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    if (!project) return;
+    setEditPName(project.name);
+    setEditPCode(project.code);
+    setEditPDept(project.department);
+    setEditPManager(project.manager);
+    setEditPDonor(project.donor);
+    setEditPLocation(project.location);
+    setEditPBudget(project.budget);
+    setEditPBudgetRealization(project.budgetRealization || 0);
+    setEditPStartDate(project.startDate);
+    setEditPEndDate(project.endDate);
+    setEditPDesc(project.description);
+    setEditPGoal(project.goal);
+    setEditPOutcomes(project.outcomes && project.outcomes.length > 0 ? [...project.outcomes] : ['']);
+    setShowEditProjectModal(true);
+  };
+
+  const handleSaveEditProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editPCode.trim() || !editPName.trim()) {
+      showFeedback('Kode Proyek dan Nama Proyek wajib diisi!', 'error');
+      return;
+    }
+
+    const updatedProject: Project = {
+      ...project,
+      name: editPName.trim(),
+      code: editPCode.trim().toUpperCase(),
+      department: editPDept.trim() || 'Dinas / Departemen Eksternal',
+      manager: editPManager.trim() || 'Staff Pelaksana',
+      startDate: editPStartDate,
+      endDate: editPEndDate,
+      budget: Number(editPBudget) || 0,
+      budgetRealization: Number(editPBudgetRealization) || 0,
+      description: editPDesc.trim() || 'Tidak ada deskripsi rinci proyek.',
+      location: editPLocation.trim() || 'Indonesia',
+      pic: editPManager.trim() || 'Staff Pelaksana',
+      donor: editPDonor.trim() || 'Yayasan DFW Indonesia',
+      goal: editPGoal.trim() || editPDesc.trim() || 'Menyelesaikan seluruh target fisik tepat waktu.',
+      outcomes: editPOutcomes.map(o => o.trim()).filter(x => x.length > 0)
+    };
+
+    onUpdateProject(updatedProject);
+    showFeedback('✓ Berhasil memperbarui data proyek!', 'success');
+    setShowEditProjectModal(false);
+  };
+
+  const handleSaveInlineRealization = () => {
+    if (!project) return;
+    const newVal = Number(inlineRealizationValue);
+    if (isNaN(newVal) || newVal < 0) {
+      showFeedback('Realisasi anggaran harus berupa angka positif!', 'error');
+      return;
+    }
+
+    const updatedProject: Project = {
+      ...project,
+      budgetRealization: newVal
+    };
+
+    onUpdateProject(updatedProject);
+    showFeedback('✓ Berhasil memperbarui realisasi serapan anggaran secara langsung!', 'success');
+    setIsEditingRealizationInline(false);
+  };
+
+  const handleConfirmDeleteCurrentProject = () => {
+    if (!project || !project.id) return;
+    if (confirm(`⚠️ PERINGATAN: Apakah Anda yakin ingin menghapus proyek "${project.name}" secara permanen?\n\nTindakan ini tidak dapat dibatalkan.`)) {
+      if (onDeleteProject) {
+        onDeleteProject(project.id);
+        showFeedback(`✓ Proyek berkode "${project.code}" berhasil dihapus dari sistem.`, 'success');
+      } else {
+        showFeedback('Fungsi penghapusan proyek belum terpasang dengan benar.', 'error');
       }
     }
   };
@@ -1005,19 +1126,40 @@ export default function ProjectDetail({
         <div className="p-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100">
             <div className="space-y-2 max-w-3xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="bg-sky-50 text-sky-700 px-2.5 py-1 text-xs font-bold rounded-lg border border-sky-100 font-mono">
-                  {project.code}
-                </span>
-                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 text-xs font-semibold rounded-lg font-display">
-                  {project.department}
-                </span>
-                <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${
-                  project.status === 'Sesuai Rencana' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                  project.status === 'Beresiko' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'
-                }`}>
-                  Status: {project.status}
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="bg-sky-50 text-sky-700 px-2.5 py-1 text-xs font-bold rounded-lg border border-sky-100 font-mono">
+                    {project.code}
+                  </span>
+                  <span className="bg-slate-100 text-slate-600 px-2.5 py-1 text-xs font-semibold rounded-lg font-display">
+                    {project.department}
+                  </span>
+                  <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${
+                    project.status === 'Sesuai Rencana' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                    project.status === 'Beresiko' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'
+                  }`}>
+                    Status: {project.status}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenEditModal}
+                    className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg text-xs font-bold font-display shadow-sm flex items-center gap-1 transition-all hover:scale-[1.02] cursor-pointer"
+                    title="Ubah Data Proyek"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit Proyek</span>
+                  </button>
+                  <button
+                    onClick={handleConfirmDeleteCurrentProject}
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-lg text-xs font-bold font-display shadow-sm flex items-center gap-1 transition-all hover:scale-[1.02] cursor-pointer"
+                    title="Hapus Proyek"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Proyek</span>
+                  </button>
+                </div>
               </div>
               <h2 className="text-xl md:text-2xl font-bold font-display text-slate-800 leading-tight">
                 {project.name}
@@ -1066,16 +1208,6 @@ export default function ProjectDetail({
 
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
-                <DollarSign className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[11px] text-slate-400 font-semibold block uppercase">Anggaran Alokasi</span>
-                <span className="text-sm font-mono font-bold text-slate-700">{formatIDR(project.budget)}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600">
                 <Calendar className="w-5 h-5" />
               </div>
               <div>
@@ -1096,6 +1228,82 @@ export default function ProjectDetail({
                   {new Date(project.endDate).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
                 </span>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-150/80 rounded-xl relative shadow-xs">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-1.5 text-slate-500">
+                  <DollarSign className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span className="text-[10px] text-slate-550 font-bold uppercase tracking-wider">Keuangan Proyek</span>
+                </div>
+                {!isEditingRealizationInline && (
+                  <button
+                    onClick={() => {
+                      setInlineRealizationValue(String(project.budgetRealization || 0));
+                      setIsEditingRealizationInline(true);
+                    }}
+                    className="text-[10px] text-sky-600 hover:text-sky-700 hover:underline font-bold flex items-center gap-0.5"
+                    title="Ubah Anggaran Realisasi"
+                  >
+                    <span>Edit Serapan</span>
+                  </button>
+                )}
+              </div>
+
+              {isEditingRealizationInline ? (
+                <div className="space-y-2 pt-1 animate-fade-in" id="inline-realization-editor">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Edit Realisasi Serapan (Rp):</label>
+                    <input
+                      type="number"
+                      value={inlineRealizationValue}
+                      onChange={(e) => setInlineRealizationValue(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-755 focus:outline-sky-600"
+                      placeholder="e.g. 500000000"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRealizationInline(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveInlineRealization}
+                      className="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-0.5 rounded text-[10px] font-bold shadow-xs active:scale-[0.98]"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex justify-between items-baseline gap-1" id="approved-budget-row">
+                    <span className="text-[10px] text-slate-400 font-medium">Disetujui:</span>
+                    <span className="text-xs font-mono font-bold text-slate-700">{formatIDR(project.budget)}</span>
+                  </div>
+                  <div className="flex justify-between items-baseline gap-1 pb-1 border-b border-dashed border-slate-200" id="realized-budget-row">
+                    <span className="text-[10px] text-slate-500 font-bold">Serapan:</span>
+                    <span className="text-xs font-mono font-extrabold text-sky-700">{formatIDR(project.budgetRealization || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-0.5" id="budget-percentage-indicator">
+                    <span className="text-[9px] text-slate-400 font-medium uppercase font-display">Tingkat Penyerapan:</span>
+                    <span className={`px-1.5 py-0.3 rounded text-[9px] font-mono font-bold ${
+                      (project.budgetRealization || 0) > project.budget
+                        ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                        : ((project.budgetRealization || 0) / (project.budget || 1)) >= 0.8
+                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                    }`}>
+                      {project.budget > 0 ? (((project.budgetRealization || 0) / project.budget) * 100).toFixed(1) : '0.0'}%
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2644,6 +2852,276 @@ export default function ProjectDetail({
             }
           }}
         />
+      )}
+
+      {/* 5. MODAL DETIL EDIT PROYEK (POPUP DIALOG) */}
+      {showEditProjectModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto" id="edit-project-modal-container">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden leading-normal" id="edit-project-modal-content">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0" id="edit-project-modal-header">
+              <div className="flex items-center gap-2">
+                <Edit className="w-5 h-5 text-amber-500" />
+                <h3 className="font-display font-bold text-sm sm:text-base text-white">Ubah Data Proyek ({editPCode})</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowEditProjectModal(false)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                id="edit-project-modal-close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body / Scrollable Form */}
+            <form onSubmit={handleSaveEditProject} className="flex-1 overflow-y-auto p-6 space-y-6" id="edit-project-form">
+              
+              {/* Grup 1. Informasi Proyek */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <span className="text-slate-800 text-xs sm:text-sm font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                    📋 Informasi Proyek Utama
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-1">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Kode Proyek (ID): <span className="text-rose-500">*</span></label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. SLD-LUWU"
+                      value={editPCode}
+                      onChange={(e) => setEditPCode(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-sky-600 focus:bg-white text-slate-750 transition-colors"
+                      id="edit-project-code-input"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Lengkap Proyek: <span className="text-rose-500">*</span></label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Konservasi Terumbu Karang & Kelola Hutan Bakau"
+                      value={editPName}
+                      onChange={(e) => setEditPName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-755 transition-colors"
+                      id="edit-project-name-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Dinas / Instansi Mitra:</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Dinas Kelautan dan Perikanan Daerah"
+                      value={editPDept}
+                      onChange={(e) => setEditPDept(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                      id="edit-project-dept-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Manajer Proyek (PIC Utama):</label>
+                    {staff.length > 0 ? (
+                      <select
+                        value={editPManager}
+                        onChange={(e) => setEditPManager(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-705 transition-colors cursor-pointer"
+                        id="edit-project-manager-select"
+                      >
+                        <option value="">-- Pilih Manajer Proyek --</option>
+                        {staff.map(s => (
+                          <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Dr. H. Abdul Rasyid, M.Si."
+                        value={editPManager}
+                        onChange={(e) => setEditPManager(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                        id="edit-project-manager-input"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Lembaga Donor / Co-funder:</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. JICA, USAID, Yayasan DFW Indonesia"
+                      value={editPDonor}
+                      onChange={(e) => setEditPDonor(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                      id="edit-project-donor-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Lokasi Fokus Kegiatan:</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Kepulauan Selayar, Sulawesi Selatan"
+                      value={editPLocation}
+                      onChange={(e) => setEditPLocation(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                      id="edit-project-location-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grup 2. Jadwal & Keuangan */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <span className="text-slate-800 text-xs sm:text-sm font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                    📊 Alokasi Keuangan & Jadwal
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Anggaran Disetujui (Rp):</label>
+                    <input 
+                      type="number" 
+                      value={editPBudget}
+                      onChange={(e) => setEditPBudget(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-sky-600 focus:bg-white text-slate-705 transition-colors"
+                      id="edit-project-budget-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Realisasi Serapan (Rp):</label>
+                    <input 
+                      type="number" 
+                      value={editPBudgetRealization}
+                      onChange={(e) => setEditPBudgetRealization(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-sky-600 focus:bg-white text-slate-705 transition-colors"
+                      id="edit-project-realization-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Tanggal Mulai:</label>
+                    <input 
+                      type="date" 
+                      value={editPStartDate}
+                      onChange={(e) => setEditPStartDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-600 focus:outline-sky-600 focus:bg-white transition-colors"
+                      id="edit-project-startdate-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Estimasi Selesai:</label>
+                    <input 
+                      type="date" 
+                      value={editPEndDate}
+                      onChange={(e) => setPEndDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-600 focus:outline-sky-600 focus:bg-white transition-colors"
+                      id="edit-project-enddate-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grup 3. Deskripsi & Goal */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <span className="text-slate-800 text-xs sm:text-sm font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                    🎯 Tujuan & Target Capaian Hasil
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Deskripsi Ringkas Kegiatan:</label>
+                  <textarea 
+                    rows={2}
+                    placeholder="Deskripsikan program secara ringkas agar dinas dan tim eksekutif memahami esensinya..."
+                    value={editPDesc}
+                    onChange={(e) => setEditPDesc(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium focus:outline-sky-600 focus:bg-white text-slate-600 transition-colors"
+                    id="edit-project-description-input"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Tujuan Utama (Goal):</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Meningkatkan kelestarian hutan bakau dan kemandirian ekonomi nelayan pesisir"
+                    value={editPGoal}
+                    onChange={(e) => setEditPGoal(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                    id="edit-project-goal-input"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-600">Target Hasil (Outcomes):</label>
+                    <button 
+                      type="button" 
+                      onClick={handleEditModalAddOutcome}
+                      className="text-amber-650 text-amber-600 hover:text-amber-700 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      id="edit-project-add-outcome-btn"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Target Hasil</span>
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {editPOutcomes.map((outcome, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input 
+                          type="text" 
+                          placeholder={`Outcome ${idx + 1} (e.g. Penanaman 5.000 bibit mangrove)`}
+                          value={outcome}
+                          onChange={(e) => handleEditModalUpdateOutcome(idx, e.target.value)}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-sky-600 focus:bg-white text-slate-700 transition-colors"
+                          id={`edit-project-outcome-input-${idx}`}
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => handleEditModalRemoveOutcome(idx)}
+                          className="text-slate-400 hover:text-rose-600 transition-colors p-2 text-xs font-bold cursor-pointer"
+                          id={`edit-project-outcome-remove-${idx}`}
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="border-t pt-5 mt-4 flex items-center justify-end gap-2.5 shrink-0" id="edit-project-modal-footer">
+                <button 
+                  type="button"
+                  onClick={() => setShowEditProjectModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  id="edit-project-cancel-btn"
+                >
+                  Urungkan
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/10 transition-all hover:scale-[1.02] cursor-pointer"
+                  id="edit-project-submit-btn"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
       )}
 
       {/* 4. MODAL DETIL TAMBAH PROYEK (POPUP DIALOG) */}

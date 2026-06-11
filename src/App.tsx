@@ -231,6 +231,20 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === autoProject.id ? autoProject : p));
   };
 
+  const handleDeleteProject = (projectId: string) => {
+    setProjects(prev => {
+      const remaining = prev.filter(p => p.id !== projectId);
+      if (selectedProjectId === projectId) {
+        if (remaining.length > 0) {
+          setSelectedProjectId(remaining[0].id);
+        } else {
+          setSelectedProjectId('');
+        }
+      }
+      return remaining;
+    });
+  };
+
   const handleAddStaff = (newStaff: Staff) => {
     setStaff(prev => [...prev, newStaff]);
   };
@@ -944,6 +958,7 @@ export default function App() {
                   setSelectedProjectId(newProjects[newProjects.length - 1].id);
                 }
               }}
+              onDeleteProject={handleDeleteProject}
               staff={staff}
               documents={documents}
               setDocuments={setDocuments}
