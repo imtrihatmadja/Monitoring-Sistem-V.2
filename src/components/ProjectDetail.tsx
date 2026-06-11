@@ -38,7 +38,11 @@ import {
   Lightbulb,
   AlertTriangle,
   X,
-  Upload
+  Upload,
+  Search,
+  ExternalLink,
+  File,
+  Download
 } from 'lucide-react';
 import ImportProjectModal from './ImportProjectModal';
 
@@ -51,6 +55,8 @@ interface ProjectDetailProps {
   onAddProject?: (newProject: Project) => void;
   onAddProjects?: (newProjects: Project[]) => void;
   staff?: Staff[];
+  documents?: any[];
+  setDocuments?: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 export default function ProjectDetail({ 
@@ -61,7 +67,9 @@ export default function ProjectDetail({
   onTriggerAlert,
   onAddProject,
   onAddProjects,
-  staff = []
+  staff = [],
+  documents = [],
+  setDocuments = () => {}
 }: ProjectDetailProps) {
 
   const project = projects.find(p => p.id === selectedProjectId) || projects[0] || {
@@ -90,7 +98,69 @@ export default function ProjectDetail({
   };
 
   // Tab State
-  const [activeSubTab, setActiveSubTab] = useState<'indicators' | 'activities' | 'reflections' | 'manage'>('indicators');
+  const [activeSubTab, setActiveSubTab] = useState<'indicators' | 'activities' | 'reflections' | 'manage' | 'documents'>('indicators');
+
+  // Document Tab Specific States
+  const [docSearch, setDocSearch] = useState('');
+  const [docCategoryFilter, setDocCategoryFilter] = useState('Semua');
+  const [docCategoryInput, setDocCategoryInput] = useState('ToR');
+  const [docUploadFeedback, setDocUploadFeedback] = useState<string | null>(null);
+  const [isDocDragging, setIsDocDragging] = useState(false);
+
+  // File Upload Handlers for Documents tab
+  const uploadDocToProject = (file: File) => {
+    const targetCode = project ? project.code : '';
+    if (!targetCode) {
+      setDocUploadFeedback('❌ Gagal: Kode proyek tidak ditemukan.');
+      return;
+    }
+    const newDoc = {
+      id: `doc-${Date.now()}`,
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      date: new Date().toISOString().split('T')[0],
+      project: targetCode,
+      category: docCategoryInput,
+      status: 'Disetujui',
+      isGDrive: false
+    };
+    setDocuments(prev => [newDoc, ...prev]);
+    setDocUploadFeedback(`✓ Berhasil menambahkan dokumen "${file.name}" ke kategori [${docCategoryInput}]!`);
+    setTimeout(() => setDocUploadFeedback(null), 4000);
+  };
+
+  const handleDocDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDocDragging(true);
+  };
+
+  const handleDocDragLeave = () => {
+    setIsDocDragging(false);
+  };
+
+  const handleDocDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDocDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      uploadDocToProject(file);
+    }
+  };
+
+  const handleLocalProjectFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadDocToProject(file);
+    }
+  };
+
+  const handleDeleteDocForProject = (docId: string) => {
+    if (confirm('Apakah Anda yakin ingin menghapus berkas dokumen ini?')) {
+      setDocuments(prev => prev.filter(d => d.id !== docId));
+      setDocUploadFeedback('✓ Dokumen berhasil dihilangkan dari daftar proyek ini.');
+      setTimeout(() => setDocUploadFeedback(null), 3000);
+    }
+  };
 
   // Add Project Modal States
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
@@ -339,10 +409,36 @@ export default function ProjectDetail({
   }
 
   // Calculate project aggregate progress
+  // Formula: (rata-rata persentase aktivitas + rata-rata persentase indikator secara keseluruhan) / 2
   const totalWeight = project.activities.reduce((acc, curr) => acc + curr.weight, 0);
-  const overallProgress = totalWeight > 0 
-    ? Math.round(project.activities.reduce((acc, curr) => acc + (curr.progress * (curr.weight / totalWeight)), 0) * 10) / 10
+  const avgActivityProgress = totalWeight > 0 
+    ? project.activities.reduce((acc, curr) => acc + (curr.progress * (curr.weight / totalWeight)), 0)
     : 0;
+
+  const indicatorPercentages = project.indicators.map(ind => {
+    if (!ind.target || ind.target <= 0) return 0;
+    const pct = (ind.currentAchievement / ind.target) * 100;
+    return Math.min(100, Math.max(0, pct));
+  });
+
+  const avgIndicatorProgress = indicatorPercentages.length > 0
+    ? indicatorPercentages.reduce((acc, curr) => acc + curr, 0) / indicatorPercentages.length
+    : 0;
+
+  // Combine both parts divided by 2
+  let overallProgressValue = 0;
+  if (project.activities.length > 0 && project.indicators.length > 0) {
+    overallProgressValue = (avgActivityProgress + avgIndicatorProgress) / 2;
+  } else if (project.activities.length > 0) {
+    overallProgressValue = avgActivityProgress;
+  } else if (project.indicators.length > 0) {
+    overallProgressValue = avgIndicatorProgress;
+  }
+
+  const overallProgress = Math.round(overallProgressValue * 10) / 10;
+
+  // Filter documents associated with this project code
+  const projectDocs = documents.filter(doc => doc.project === project.code);
 
   // Formatter for IDR Currency
   const formatIDR = (value: number) => {
@@ -959,6 +1055,17 @@ export default function ProjectDetail({
           Aktivitas & Sub-Aktivitas ({project.activities.length})
         </button>
         <button 
+          onClick={() => setActiveSubTab('documents')}
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+            activeSubTab === 'documents' 
+              ? 'border-sky-600 text-sky-700' 
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-sky-600" />
+          Dokumen Proyek ({projectDocs.length})
+        </button>
+        <button 
           onClick={() => setActiveSubTab('reflections')}
           className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
             activeSubTab === 'reflections' 
@@ -1567,6 +1674,261 @@ export default function ProjectDetail({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Dokumen Proyek (List of uploaded files & document management) */}
+      {activeSubTab === 'documents' && (
+        <div id="project-documents-tab-pane" className="space-y-6">
+          {/* Feedback Toast if any */}
+          {docUploadFeedback && (
+            <div className={`p-4 rounded-xl text-xs font-bold font-sans transition-all shadow-xs ${
+              docUploadFeedback.startsWith('❌') 
+                ? 'bg-rose-50 text-rose-700 border border-rose-200' 
+                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            }`}>
+              {docUploadFeedback}
+            </div>
+          )}
+
+          {/* Grid Layout: Left is File List (2/3 width), Right is Upload Area (1/3 width) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left Box: list of files with Search & Category Pills */}
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-105 p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+                <div>
+                  <h3 className="font-display font-bold text-slate-800 text-base">Arsip Dokumen Proyek ({projectDocs.length})</h3>
+                  <p className="text-xs text-slate-500">Daftar lampiran, naskah kerja, ToR, atau laporan untuk proyek {project.code}</p>
+                </div>
+                
+                {/* Search Bar */}
+                <div className="relative w-full sm:w-64 border border-slate-150 rounded-xl">
+                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={docSearch}
+                    onChange={(e) => setDocSearch(e.target.value)}
+                    placeholder="Cari nama dokumen..."
+                    className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border-0 rounded-xl text-xs font-sans text-slate-750 focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 transition-all placeholder:text-slate-400"
+                  />
+                  {docSearch && (
+                    <button 
+                      onClick={() => setDocSearch('')}
+                      className="absolute right-3 top-2 text-slate-450 hover:text-slate-700 text-xs font-bold"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Category Filters inside active project */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Filter Kategori:</span>
+                {['Semua', 'ToR', 'Laporan', 'MoU', 'Amdal', 'lainnya'].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setDocCategoryFilter(cat)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold font-sans transition-all cursor-pointer ${
+                      docCategoryFilter === cat
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Document Results Table or List */}
+              <div className="overflow-x-auto">
+                {projectDocs.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 max-w-sm mx-auto">
+                    <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2 opacity-80" />
+                    <p className="font-semibold text-slate-700 text-xs">Belum Ada Dokumen Terunggah</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Unggah dokumen pertama Anda lewat kotak panel di sebelah kanan.</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const filteredDocs = projectDocs.filter(doc => {
+                      const matchesSearch = doc.name.toLowerCase().includes(docSearch.toLowerCase());
+                      const matchesCategory = docCategoryFilter === 'Semua' || doc.category === docCategoryFilter;
+                      return matchesSearch && matchesCategory;
+                    });
+
+                    if (filteredDocs.length === 0) {
+                      return (
+                        <div className="py-12 text-center text-slate-400">
+                          <p className="font-semibold text-slate-650 text-xs">Pencarian Tidak Ditemukan</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Gunakan kata kunci atau filter kategori lain.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <table className="w-full text-left border-collapse min-w-[550px]">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                            <th className="py-2.5">Nama File</th>
+                            <th className="py-2.5 font-bold">Kategori</th>
+                            <th className="py-2.5">Ukuran</th>
+                            <th className="py-2.5">Tanggal</th>
+                            <th className="py-2.5">Sumber</th>
+                            <th className="py-2.5 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {filteredDocs.map((doc) => {
+                            const isPdf = doc.name.toLowerCase().endsWith('.pdf');
+                            const isExcel = doc.name.toLowerCase().endsWith('.xlsx') || doc.name.toLowerCase().endsWith('.xls') || doc.name.toLowerCase().endsWith('.csv');
+                            
+                            return (
+                              <tr key={doc.id} className="text-xs hover:bg-slate-55/75 transition-colors group">
+                                <td className="py-3 font-medium text-slate-800 pr-4 max-w-xs truncate">
+                                  <div className="flex items-center gap-2">
+                                    {isPdf ? (
+                                      <FileText className="w-4 h-4 text-rose-500 shrink-0" />
+                                    ) : isExcel ? (
+                                      <File className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    ) : (
+                                      <File className="w-4 h-4 text-sky-500 shrink-0" />
+                                    )}
+                                    <span title={doc.name} className="truncate">{doc.name}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                    doc.category === 'ToR' ? 'bg-indigo-50 text-indigo-750 border border-indigo-200' :
+                                    doc.category === 'Laporan' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                    doc.category === 'MoU' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                                    doc.category === 'Amdal' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                    'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {doc.category}
+                                  </span>
+                                </td>
+                                <td className="py-3 text-slate-500 pr-2 font-mono text-[11px]">{doc.size}</td>
+                                <td className="py-3 text-slate-500 pr-2 font-mono text-[11px]">{doc.date}</td>
+                                <td className="py-3 pr-2">
+                                  {doc.isGDrive ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-600 bg-sky-50 px-1.5 py-0.2 rounded border border-sky-100">
+                                      Google Drive
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.2 rounded border border-slate-150">
+                                      Pratinjau Lokal
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {doc.webViewLink ? (
+                                      <a
+                                        href={doc.webViewLink}
+                                        target="_blank"
+                                        referrerPolicy="no-referrer"
+                                        rel="noopener noreferrer"
+                                        className="p-1 text-slate-400 hover:text-sky-650 hover:bg-sky-50 rounded-lg transition-all"
+                                        title="Buka berkas di Google Drive"
+                                      >
+                                        <ExternalLink className="w-3.5 h-3.5 text-sky-600 hover:scale-105" />
+                                      </a>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => alert(`Informasi File:\nNama: ${doc.name}\nUkuran: ${doc.size}\nStatus: ${doc.status}\n\nKarena ini adalah dokumen pratinjau lokal, Anda dapat melacaknya di sesi browser saat ini. Sambungkan Google Drive melalui tab menu "Dokumen Pendukung" untuk membuka akses cloud lengkap.`)}
+                                        className="p-1 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-lg transition-all"
+                                        title="Detail Berkas"
+                                      >
+                                        <Download className="w-3.5 h-3.5 text-slate-400 hover:text-sky-600" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteDocForProject(doc.id)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                      title="Hapus berkas"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+
+            {/* Right Box: Drag and Drop Upload Panel */}
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-xs space-y-4">
+              <div>
+                <h3 className="font-display font-bold text-slate-800 text-base flex items-center gap-2">
+                  <Upload className="w-4.5 h-4.5 text-sky-600" />
+                  Unggah Dokumen Baru
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Lampirkan file laporan atau spesifikasi yang berkorelasi ke proyek {project.code}</p>
+              </div>
+
+              {/* Category Select Input */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Kategori Dokumen</label>
+                <select
+                  value={docCategoryInput}
+                  onChange={(e) => setDocCategoryInput(e.target.value)}
+                  className="w-full font-sans text-xs border border-slate-200 rounded-xl px-3 py-2 bg-slate-50/50 focus:outline-hidden focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 transition-all font-medium text-slate-700"
+                >
+                  <option value="ToR">ToR (Term of Reference)</option>
+                  <option value="Laporan">Laporan Kegiatan / Lapangan</option>
+                  <option value="MoU">Sinergi / MoU Kesepakatan</option>
+                  <option value="Amdal">Amdal & Persetujuan Regulator</option>
+                  <option value="lainnya">Lainnya / Lampiran Umum</option>
+                </select>
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={handleDocDragOver}
+                onDragLeave={handleDocDragLeave}
+                onDrop={handleDocDrop}
+                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2.5 ${
+                  isDocDragging 
+                    ? 'border-sky-500 bg-sky-50/30 ring-4 ring-sky-500/10' 
+                    : 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300'
+                }`}
+                onClick={() => document.getElementById('project-file-upload-input')?.click()}
+              >
+                <input
+                  type="file"
+                  id="project-file-upload-input"
+                  className="hidden"
+                  onChange={handleLocalProjectFileUpload}
+                />
+                
+                <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
+                  <Upload className="w-5 h-5" />
+                </div>
+                
+                <div>
+                  <p className="text-xs font-bold text-slate-700">Tarik berkas ke sini, atau <span className="text-sky-605 text-sky-600">telusuri</span></p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Mendukung berkas PDF, Excel, Word dsb, max 10MB</p>
+                </div>
+              </div>
+
+              {/* Informative Guidance */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-150 leading-relaxed text-[11px] text-slate-550 block">
+                <span className="font-bold text-slate-700 block mb-0.5 font-sans flex items-center gap-1.5">💡 Sinkronisasi Google Drive Aktif?</span>
+                Demi kedaulatan data instansi DFW, Anda dapat mengaktifkan integrasi Google Drive institusional via tab menu utama <b>Dokumen Pendukung</b> di bagian samping kiri. Berkas yang ditarik/diunggah di sana akan otomatis tersinkron ke cloud drive Anda.
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}

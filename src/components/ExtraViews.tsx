@@ -25,6 +25,9 @@ import {
   Phone
 } from 'lucide-react';
 import AddStaffModal from './AddStaffModal';
+import { User } from 'firebase/auth';
+import { initAuth, googleSignIn, logout as googleLogout, auth as firebaseAuth } from '../lib/firebaseAuth';
+import { getOrCreateDriveFolderPath, uploadFileToDrive, listAllMonitoringFiles, deleteDriveFile } from '../lib/googleDriveService';
 
 interface ExtraViewsProps {
   activeTab: string;
@@ -34,6 +37,8 @@ interface ExtraViewsProps {
   staff?: Staff[];
   onAddStaff?: (s: Staff) => void;
   onDeleteStaff?: (id: string) => void;
+  documents?: any[];
+  setDocuments?: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 interface Beneficiary {
@@ -57,7 +62,9 @@ export default function ExtraViews({
   onUpdateProject,
   staff = [],
   onAddStaff,
-  onDeleteStaff
+  onDeleteStaff,
+  documents = [],
+  setDocuments = () => {}
 }: ExtraViewsProps) {
   // Database Penerima Manfaat State
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(false);
@@ -555,17 +562,120 @@ export default function ExtraViews({
     setShowUpdateModal(false);
   };
 
-  // Mock files state for "Dokumen" tab
-  const [documents, setDocuments] = useState([
-    { id: 'doc-1', name: 'DED_Gambar_Teknis_SIPP_Luwu.pdf', size: '4.8 MB', date: '2026-02-12', project: 'SIPP-LUWU', category: 'Desain Gambar Teknis', status: 'Disetujui' },
-    { id: 'doc-2', name: 'MoU_SIPP_Luwu_USAID_DFW.pdf', size: '2.5 MB', date: '2026-01-20', project: 'SIPP-LUWU', category: 'Perjanjian Kerjasama', status: 'Disetujui' },
-    { id: 'doc-3', name: 'Laporan_Amdal_Sabuk_Hijau_Mangrove.pdf', size: '8.2 MB', date: '2026-03-05', project: 'MANGROVE-RES', category: 'Analisis Lingkungan', status: 'Disetujui' },
-    { id: 'doc-4', name: 'Adat_Sasi_Pesisir_Nelayan_Berdikari.pdf', size: '1.1 MB', date: '2026-05-25', project: 'MANGROVE-RES', category: 'Regulasi Komunitas', status: 'Draft' },
-    { id: 'doc-5', name: 'Rencana_Aksi_Komunal_SABK_NTT.pdf', size: '3.4 MB', date: '2025-12-05', project: 'SABK-SAN', category: 'Rencana Kerja', status: 'Disetujui' }
-  ]);
-
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFilesFeedback, setUploadedFilesFeedback] = useState<string | null>(null);
+
+  // --- Google Drive States ---
+  const [googleUser, setGoogleUser] = useState<User | null>(firebaseAuth.currentUser);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [isAuthInitializing, setIsAuthInitializing] = useState(true);
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ToR');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
+
+  // Initialize selectedProject to first project when list is populated
+  useEffect(() => {
+    if (projects && projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].code);
+    }
+  }, [projects, selectedProject]);
+
+  // Handle Firebase Auth Session Init & Google Drive listing refresh
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleToken(token);
+        setIsAuthInitializing(false);
+        setAuthError(null);
+        loadDriveFiles(token);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleToken(null);
+        setIsAuthInitializing(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const loadDriveFiles = async (token: string) => {
+    setIsLoadingFiles(true);
+    try {
+      const realFiles = await listAllMonitoringFiles(token);
+      if (realFiles.length > 0) {
+        const mapped = realFiles.map(rf => ({
+          id: rf.id,
+          name: rf.name,
+          size: rf.size || '0.00 MB',
+          date: rf.createdTime.split('T')[0],
+          project: rf.projectCode || 'Lainnya',
+          category: rf.category || 'ToR',
+          status: 'Disetujui',
+          isGDrive: true,
+          webViewLink: rf.webViewLink
+        }));
+        setDocuments(mapped);
+      } else {
+        setDocuments([]);
+      }
+    } catch (e) {
+      console.error("Gagal sinkron Google Drive:", e);
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  };
+
+  const handleGoogleSignInByHand = async () => {
+    if (isSigningInGoogle) return;
+    setIsSigningInGoogle(true);
+    setAuthError(null);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setGoogleUser(res.user);
+        setGoogleToken(res.accessToken);
+        setUploadedFilesFeedback('Koneksi Google Drive Berhasil!');
+        setTimeout(() => setUploadedFilesFeedback(null), 3000);
+        await loadDriveFiles(res.accessToken);
+      }
+    } catch (err: any) {
+      console.error("Sign in error caught:", err);
+      if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('closed-by-user') || err.message?.includes('popup-closed')) {
+        setAuthError('Otorisasi dibatalkan karena jendela pop-up ditutup sebelum selesai. Silakan tekan tombol Otorisasi kembali untuk menghubungkan akun Google Anda.');
+      } else if (err.code === 'auth/cancelled-popup-request' || err.message?.includes('cancelled-popup')) {
+        setAuthError('Terdapat permintaan masuk lainnya yang sedang berjalan. Jendela otorisasi sebelumnya telah ditutup.');
+      } else {
+        setAuthError(`Gagal menyambung ke Google Drive: ${err.message || 'Koneksi terinterupsi'}`);
+      }
+    } finally {
+      setIsSigningInGoogle(false);
+    }
+  };
+
+  const handleGoogleLogoutByHand = async () => {
+    setAuthError(null);
+    try {
+      await googleLogout();
+      setGoogleUser(null);
+      setGoogleToken(null);
+      setUploadedFilesFeedback('Koneksi Google Drive diputuskan.');
+      setTimeout(() => setUploadedFilesFeedback(null), 3000);
+      // Fallback to default mock document state on logout
+      setDocuments([
+        { id: 'doc-1', name: 'DED_Gambar_Teknis_SIPP_Luwu.pdf', size: '4.8 MB', date: '2026-02-12', project: 'SIPP-LUWU', category: 'ToR', status: 'Disetujui' },
+        { id: 'doc-2', name: 'MoU_SIPP_Luwu_USAID_DFW.pdf', size: '2.5 MB', date: '2026-01-20', project: 'SIPP-LUWU', category: 'Laporan', status: 'Disetujui' },
+        { id: 'doc-3', name: 'Laporan_Amdal_Sabuk_Hijau_Mangrove.pdf', size: '8.2 MB', date: '2026-03-05', project: 'MANGROVE-RES', category: 'Laporan', status: 'Disetujui' },
+        { id: 'doc-4', name: 'Adat_Sasi_Pesisir_Nelayan_Berdikari.pdf', size: '1.1 MB', date: '2026-05-25', project: 'MANGROVE-RES', category: 'lainnya', status: 'Draft' },
+        { id: 'doc-5', name: 'Rencana_Aksi_Komunal_SABK_NTT.pdf', size: '3.4 MB', date: '2025-12-05', project: 'SABK-SAN', category: 'Laporan', status: 'Disetujui' }
+      ]);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -576,49 +686,84 @@ export default function ExtraViews({
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    // Simulate adding file
-    const file = e.dataTransfer.files[0];
-    if (file) {
+  const uploadSingleFile = async (file: File) => {
+    const targetProjCode = selectedProject || projects[0]?.code || 'UMUM';
+    const targetProjObj = projects.find(p => p.code === targetProjCode);
+    const targetProjName = targetProjObj ? targetProjObj.name : 'Proyek Umum';
+    const targetCategory = selectedCategory || 'ToR';
+
+    if (googleToken) {
+      setIsUploading(true);
+      setUploadedFilesFeedback('Sedang mengunggah dokumen ke Google Drive...');
+      try {
+        const folderId = await getOrCreateDriveFolderPath(googleToken, targetProjCode, targetProjName, targetCategory);
+        const uploaded = await uploadFileToDrive(googleToken, file, folderId);
+        
+        setUploadedFilesFeedback(`✓ Sukses mengunggah "${uploaded.name}" ke Google Drive!`);
+        setTimeout(() => setUploadedFilesFeedback(null), 5000);
+        await loadDriveFiles(googleToken);
+      } catch (err: any) {
+        console.error("Gagal mengunggah ke Google Drive:", err);
+        setUploadedFilesFeedback(`❌ Gagal: ${err.message || 'Error tidak diketahui'}`);
+        setTimeout(() => setUploadedFilesFeedback(null), 5000);
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      // Offline local preview fallback
       const newDoc = {
         id: `doc-${Date.now()}`,
         name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         date: new Date().toISOString().split('T')[0],
-        project: projects[0]?.code || 'UMUM',
-        category: 'Dokumen Pendukung',
-        status: 'Disetujui'
+        project: targetProjCode,
+        category: targetCategory,
+        status: 'Disetujui',
+        isGDrive: false
       };
       setDocuments(prev => [newDoc, ...prev]);
-      setUploadedFilesFeedback(`Berhasil mengunggah dokumen "${file.name}"!`);
+      setUploadedFilesFeedback(`✓ [Pratinjau] Berhasil menambahkan dokumen "${file.name}"!`);
       setTimeout(() => setUploadedFilesFeedback(null), 4000);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      uploadSingleFile(file);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const newDoc = {
-        id: `doc-${Date.now()}`,
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        date: new Date().toISOString().split('T')[0],
-        project: projects[0]?.code || 'UMUM',
-        category: 'Dokumen Pendukung',
-        status: 'Disetujui'
-      };
-      setDocuments(prev => [newDoc, ...prev]);
-      setUploadedFilesFeedback(`Berhasil mengunggah dokumen "${file.name}"!`);
-      setTimeout(() => setUploadedFilesFeedback(null), 4000);
+      uploadSingleFile(file);
     }
   };
 
-  const handleDeleteDoc = (docId: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus arsip dokumen ini?')) {
+  const handleDeleteDoc = async (docId: string, isGDrive?: boolean) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus arsip dokumen ini?')) {
+      return;
+    }
+
+    if (isGDrive && googleToken) {
+      setUploadedFilesFeedback('Menghapus berkas dari Google Drive...');
+      try {
+        await deleteDriveFile(googleToken, docId);
+        setUploadedFilesFeedback('✓ Berkas berhasil dihapus dari Google Drive.');
+        setTimeout(() => setUploadedFilesFeedback(null), 3000);
+        await loadDriveFiles(googleToken);
+      } catch (err: any) {
+        console.error(err);
+        setUploadedFilesFeedback(`❌ Gagal menghapus: ${err.message}`);
+        setTimeout(() => setUploadedFilesFeedback(null), 4000);
+      }
+    } else {
       setDocuments(prev => prev.filter(d => d.id !== docId));
+      setUploadedFilesFeedback('✓ Berkas pratinjau dihapus.');
+      setTimeout(() => setUploadedFilesFeedback(null), 3000);
     }
   };
 
@@ -626,103 +771,251 @@ export default function ExtraViews({
   if (activeTab === 'documents') {
     return (
       <div className="space-y-6">
-        <div id="document-tab-card" className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-4">
+        {/* Google Drive Status Banner */}
+        <div id="gdrive-status-card" className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`p-3 rounded-xl ${googleToken ? 'bg-emerald-55/15 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+              <Upload className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-display">
+                {googleToken ? 'Sistem Cloud Google Drive Terhubung' : 'Penyimpanan Google Drive Terputus'}
+                <span className={`w-2.5 h-2.5 rounded-full ${googleToken ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-xl">
+                {googleToken
+                  ? `Menggunakan akun Google: ${googleUser?.email || 'Akun Aktif'}. Semua dokumen yang diunggah akan disimpan langsung ke Google Drive instansi Anda secara aman.`
+                  : 'Sistem saat ini menyimulasikan penyimpanan di database instansi DFW. Hubungkan akun Google Drive Anda agar seluruh dokumen teratur di folder proyek Anda di Google Drive.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isAuthInitializing ? (
+              <span className="text-xs text-slate-400 font-medium">Memeriksa sesi...</span>
+            ) : googleToken ? (
+              <button
+                onClick={handleGoogleLogoutByHand}
+                className="bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 text-xs px-4 py-2 rounded-xl transition font-medium flex items-center gap-1.5"
+              >
+                Putuskan Sambungan
+              </button>
+            ) : (
+              <button
+                onClick={handleGoogleSignInByHand}
+                disabled={isSigningInGoogle}
+                className={`bg-sky-600 text-white hover:bg-sky-700 hover:shadow-md text-xs px-4 py-2.5 rounded-xl transition font-bold flex items-center gap-2 cursor-pointer ${isSigningInGoogle ? 'opacity-65 cursor-not-allowed' : ''}`}
+              >
+                {isSigningInGoogle ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    Menghubungkan...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="currentColor" d="M12.24 10.285V13.4h6.86c-.277 1.56-1.602 4.585-6.86 4.585-4.54 0-8.24-3.765-8.24-8.4s3.7-8.4 8.24-8.4c2.58 0 4.307 1.095 5.298 2.045l2.465-2.37C18.435 1.21 15.62 0 12.24 0 5.58 0 0 5.37 0 12s5.58 12 12.24 12c6.96 0 11.57-4.89 11.57-11.79 0-.795-.085-1.4-.185-1.925H12.24z"/>
+                    </svg>
+                    Otorisasi Google Drive
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {authError && (
+          <div className="bg-rose-50 border border-rose-100 text-rose-800 p-4 rounded-xl flex items-start gap-3 text-xs relative shadow-xs">
+            <span className="text-sm shrink-0">⚠️</span>
+            <div className="flex-1">
+              <p className="font-bold text-rose-900">Kendala Otorisasi Sesi</p>
+              <p className="mt-0.5 leading-relaxed text-rose-700 font-medium">{authError}</p>
+            </div>
+            <button 
+              onClick={() => setAuthError(null)}
+              className="text-rose-400 hover:text-rose-700 font-bold px-2 py-1 bg-white/60 hover:bg-white rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Tutup Pesan"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
+        {/* Upload Setup Form Card */}
+        <div id="document-form-card" className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <h2 className="text-xl font-bold font-display text-slate-800 flex items-center gap-2">
+              <h2 className="text-lg font-bold font-display text-slate-800 flex items-center gap-2">
                 <FileText className="w-5.5 h-5.5 text-sky-600" />
-                Arsip & Manajemen Dokumen Proyek
+                Unggah Berkas Baru
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Kelola dokumen perencanaan, sertifikasi AMDAL, naskah kerja sama (MoU), serta pelaporan berkala NGO.
+                Atur pengiriman berkas dengan melacak proyek dan kategori fungsional secara otomatis.
               </p>
             </div>
             {uploadedFilesFeedback && (
-              <span className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 animate-pulse font-semibold">
+              <span className="text-xs bg-sky-50 text-sky-850 border border-sky-200 px-3 py-1.5 rounded-xl animate-pulse font-semibold">
                 {uploadedFilesFeedback}
               </span>
             )}
           </div>
 
-          {/* Area Drag-and-Drop */}
-          <div 
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all flex flex-col items-center justify-center gap-3 relative cursor-pointer ${
-              isDragging 
-                ? 'border-sky-500 bg-sky-25 text-sky-800 scale-[0.99]' 
-                : 'border-slate-200 hover:border-sky-400 bg-slate-50/50 hover:bg-slate-50 text-slate-500'
-            }`}
-          >
-            <input 
-              type="file" 
-              className="absolute inset-0 opacity-0 cursor-pointer" 
-              onChange={handleFileSelect} 
-            />
-            <div className={`p-3.5 rounded-xl ${isDragging ? 'bg-sky-100 text-sky-600' : 'bg-white text-slate-400 shadow-xs'}`}>
-              <Upload className="w-6 h-6" />
+          {/* Form Selection Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-755 mb-1.5 uppercase tracking-wide">Target Proyek</label>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-800 px-3.5 py-2.5 rounded-xl outline-hidden focus:border-sky-500 focus:bg-white transition"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.code}>
+                    {p.name} ({p.code})
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-1">
-              <p className="font-bold text-sm text-slate-800">Tarik & Lepaskan dokumen pendukung di sini, atau klik untuk memilih</p>
-              <p className="text-xs text-slate-400">Mendukung format PDF, XLSX, DOCX, dan PNG (Maksimum 10 MB per file)</p>
+            <div>
+              <label className="block text-xs font-bold text-slate-755 mb-1.5 uppercase tracking-wide">Kategori Dokumen</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-800 px-3.5 py-2.5 rounded-xl outline-hidden focus:border-sky-500 focus:bg-white transition"
+              >
+                <option value="ToR">ToR (Terms of Reference)</option>
+                <option value="Laporan">Laporan Mingguan/Bulanan</option>
+                <option value="foto">Foto Kegiatan & Lapangan</option>
+                <option value="absensi">Absensi Peserta & Berita Acara</option>
+                <option value="MoM">MoM (Minutes of Meeting)</option>
+                <option value="bukti capaian">Bukti Capaian Indikator</option>
+                <option value="publikasi">Publikasi & Media Rilis</option>
+                <option value="lainnya">Kategori Lainnya</option>
+              </select>
             </div>
           </div>
 
+          {/* Drag and Drop Zone */}
+          {isUploading ? (
+            <div className="border-2 border-dashed border-sky-305 bg-sky-50/30 rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-3 animate-pulse">
+              <div className="p-3 bg-sky-100 text-sky-600 rounded-full animate-bounce">
+                <Upload className="w-7 h-7" />
+              </div>
+              <p className="font-bold text-sm text-sky-800">Menyalin dokumen ke Google Drive...</p>
+              <p className="text-xs text-slate-500">Membentuk direktori foldering secara otomatis demi integritas sistem.</p>
+            </div>
+          ) : (
+            <div 
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all flex flex-col items-center justify-center gap-3 relative cursor-pointer ${
+                isDragging 
+                  ? 'border-sky-500 bg-sky-50 text-sky-850 scale-[0.995]' 
+                  : 'border-slate-200 hover:border-sky-400 bg-slate-50/50 hover:bg-slate-50 text-slate-505'
+              }`}
+            >
+              <input 
+                type="file" 
+                className="absolute inset-0 opacity-0 cursor-pointer" 
+                onChange={handleFileSelect} 
+              />
+              <div className={`p-3.5 rounded-xl ${isDragging ? 'bg-sky-101 text-sky-600' : 'bg-white text-slate-400 shadow-xs'}`}>
+                <Upload className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold text-sm text-slate-800">Tarik & Lepaskan dokumen di sini, atau klik untuk memilih</p>
+                <p className="text-xs text-slate-400">Mendukung semua berkas. Unggahan otomatis disortir ke folder target di Google Drive</p>
+              </div>
+            </div>
+          )}
+
           {/* Document list table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-xs bg-white">
-              <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-105">
-                <tr>
-                  <th className="p-3.5">Nama Dokumen</th>
-                  <th className="p-3.5 text-center">Proyek</th>
-                  <th className="p-3.5">Kategori</th>
-                  <th className="p-3.5 text-center">Ukuran</th>
-                  <th className="p-3.5 text-center">Tanggal Unggah</th>
-                  <th className="p-3.5 text-center">Status</th>
-                  <th className="p-3.5 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="p-3.5 font-semibold flex items-center gap-2 text-slate-800">
-                      <FileText className="w-4 h-4 text-sky-600 shrink-0" />
-                      {doc.name}
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <span className="font-mono bg-slate-100 text-slate-700 text-[10px] px-1.5 py-0.5 rounded font-bold">
-                        {doc.project}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-slate-500">{doc.category}</td>
-                    <td className="p-3.5 text-center font-mono text-slate-400">{doc.size}</td>
-                    <td className="p-3.5 text-center font-mono text-slate-505">
-                      {new Date(doc.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                        doc.status === 'Disetujui' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'
-                      }`}>
-                        {doc.status}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-right flex justify-end gap-1.5">
-                      <button className="text-slate-400 hover:text-sky-600 p-1 rounded-md" title="Unduh">
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteDoc(doc.id)} 
-                        className="text-slate-300 hover:text-rose-600 p-1 rounded-md" 
-                        title="Hapus"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+          <div>
+            <div className="flex items-center justify-between pb-3">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Daftar Dokumen Tersimpan ({documents.length})
+              </h3>
+              {isLoadingFiles && (
+                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full animate-pulse font-mono font-bold">
+                  Menyegarkan dari Cloud...
+                </span>
+              )}
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
+              <table className="w-full text-left text-xs bg-white">
+                <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-105">
+                  <tr>
+                    <th className="p-3.5">Nama Dokumen</th>
+                    <th className="p-3.5 text-center">Proyek</th>
+                    <th className="p-3.5">Kategori</th>
+                    <th className="p-3.5 text-center">Ukuran</th>
+                    <th className="p-3.5 text-center">Tanggal Unggah</th>
+                    <th className="p-3.5 text-center">Penyimpanan</th>
+                    <th className="p-3.5 text-right">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {documents.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        Belum ada dokumen yang diunggah untuk kriteria ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    documents.map((doc) => (
+                      <tr key={doc.id} className="hover:bg-slate-50/30 transition-colors">
+                        <td className="p-3.5 font-semibold flex items-center gap-2 text-slate-800">
+                          <FileText className="w-4 h-4 text-sky-600 shrink-0" />
+                          <span className="truncate max-w-[220px] md:max-w-xs block" title={doc.name}>{doc.name}</span>
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <span className="font-mono bg-slate-100 text-slate-700 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                            {doc.project}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-slate-500">{doc.category}</td>
+                        <td className="p-3.5 text-center font-mono text-slate-400">{doc.size}</td>
+                        <td className="p-3.5 text-center font-mono text-slate-500">
+                          {new Date(doc.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </td>
+                        <td className="p-3.5 text-center">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                            doc.isGDrive 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-110' 
+                              : 'bg-slate-100 text-slate-505 border border-slate-200'
+                          }`}>
+                            {doc.isGDrive ? 'Google Drive Cloud' : 'Pratinjau Lokal'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right flex justify-end gap-1.5">
+                          <button 
+                            onClick={() => {
+                              if (doc.webViewLink) {
+                                window.open(doc.webViewLink, '_blank', 'noopener,noreferrer');
+                              } else {
+                                alert('Berkas pratinjau lokal tidak memiliki tautan unduh. Sambungkan Google Drive untuk mencoba.');
+                              }
+                            }}
+                            className="text-slate-400 hover:text-sky-600 p-1 rounded-md transition-colors cursor-pointer" 
+                            title="Unduh / Lihat File"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteDoc(doc.id, doc.isGDrive)} 
+                            className="text-slate-350 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer" 
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

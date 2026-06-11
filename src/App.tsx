@@ -88,6 +88,23 @@ export default function App() {
     return saved ? saved : 'proj-1';
   });
 
+  // Share files/documents state globally
+  const [documents, setDocuments] = useState<any[]>(() => {
+    const saved = localStorage.getItem('monitoring_documents');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 'doc-1', name: 'DED_Gambar_Teknis_SIPP_Luwu.pdf', size: '4.8 MB', date: '2026-02-12', project: 'SIPP-LUWU', category: 'ToR', status: 'Disetujui' },
+      { id: 'doc-2', name: 'MoU_SIPP_Luwu_USAID_DFW.pdf', size: '2.5 MB', date: '2026-01-20', project: 'SIPP-LUWU', category: 'Laporan', status: 'Disetujui' },
+      { id: 'doc-3', name: 'Laporan_Amdal_Sabuk_Hijau_Mangrove.pdf', size: '8.2 MB', date: '2026-03-05', project: 'MANGROVE-RES', category: 'Laporan', status: 'Disetujui' },
+      { id: 'doc-4', name: 'Adat_Sasi_Pesisir_Nelayan_Berdikari.pdf', size: '1.1 MB', date: '2026-05-25', project: 'MANGROVE-RES', category: 'lainnya', status: 'Draft' },
+      { id: 'doc-5', name: 'Rencana_Aksi_Komunal_SABK_NTT.pdf', size: '3.4 MB', date: '2025-12-05', project: 'SABK-SAN', category: 'Laporan', status: 'Disetujui' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('monitoring_documents', JSON.stringify(documents));
+  }, [documents]);
+
   // Active Toast notification state
   const [activeToast, setActiveToast] = useState<SystemAlert | null>(null);
 
@@ -928,6 +945,8 @@ export default function App() {
                 }
               }}
               staff={staff}
+              documents={documents}
+              setDocuments={setDocuments}
             />
           )}
 
@@ -945,6 +964,8 @@ export default function App() {
               staff={staff}
               onAddStaff={handleAddStaff}
               onDeleteStaff={handleDeleteStaff}
+              documents={documents}
+              setDocuments={setDocuments}
             />
           )}
 
